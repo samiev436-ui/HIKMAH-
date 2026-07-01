@@ -589,11 +589,11 @@ label{font-size:12px;color:var(--text3);display:block;margin-bottom:5px}
 // на локальном кэше (localStorage), ничего не ломая.
 // ════════════════════════════════════════════════════════════════
 const SUPABASE_CONFIG={
-  https://avldlzkjprmqxmbgbclm.supabase.co
-  anonKey:https://avldlzkjprmqxmbgbclm.supabase.co
-  vapidPublicKey:'https://avldlzkjprmqxmbgbclm.supabase.co, // для Web Push, генерируется отдельно (см. README)
+  https://
+  anonKey:https://
+  vapidPublicKey:, // для Web Push, генерируется отдельно (см. README)
 };
-const SB_ENABLED = SUPABASE_CONFIG.url!=='https://avldlzkjprmqxmbgbclm.supabase.co' && SUPABASE_CONFIG.anonKey!=='https://avldlzkjprmqxmbgbclm.supabase.co';
+const SB_ENABLED = SUPABASE_CONFIG.url!== && SUPABASE_CONFIG.anonKey!==;
 let sb=null, sbUser=null, sbProfile=null;
 if(SB_ENABLED && window.supabase){
   sb = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
