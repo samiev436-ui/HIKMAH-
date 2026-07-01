@@ -4,6 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Регистрация — HIKMAH</title>
+
+    <!-- Подключаем Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+    <script>
+        const supabase = supabase.createClient(
+            "https://avldlzkjprmqxmbgbclm.supabase.co",
+            "YOUR-ANON-KEY"
+        );
+    </script>
+
     <link rel="stylesheet" href="styles/style.css">
 </head>
 
@@ -25,31 +35,42 @@
 </section>
 
 <div class="container">
-
     <div class="card">
-        <form>
-            <label>Имя</label>
-            <input type="text" placeholder="Ваше имя" required>
-
+        <form onsubmit="event.preventDefault(); registerUser();">
             <label>Email</label>
-            <input type="email" placeholder="Введите email" required>
+            <input id="regEmail" type="email" placeholder="Введите email" required>
 
             <label>Пароль</label>
-            <input type="password" placeholder="Придумайте пароль" required>
+            <input id="regPassword" type="password" placeholder="Придумайте пароль" required>
 
-            <button class="btn">Зарегистрироваться</button>
-
-            <p style="margin-top: 15px;">
-                Уже есть аккаунт? <a href="login.html">Войти</a>
-            </p>
+            <button class="btn" type="submit">Зарегистрироваться</button>
         </form>
     </div>
-
 </div>
 
 <footer>
     © 2026 HIKMAH — Все права защищены
 </footer>
+
+<!-- JS‑код ДОЛЖЕН быть внизу, перед </body> -->
+<script>
+async function registerUser() {
+    const email = document.querySelector("#regEmail").value;
+    const password = document.querySelector("#regPassword").value;
+
+    const { data, error } = await supabase.auth.signUp({
+        email: email,
+        password: password
+    });
+
+    if (error) {
+        alert("Ошибка: " + error.message);
+    } else {
+        alert("Регистрация успешна!");
+        window.location.href = "login.html";
+    }
+}
+</script>
 
 </body>
 </html>
