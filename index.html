@@ -589,11 +589,15 @@ label{font-size:12px;color:var(--text3);display:block;margin-bottom:5px}
 // на локальном кэше (localStorage), ничего не ломая.
 // ════════════════════════════════════════════════════════════════
 const SUPABASE_CONFIG={
-  https://
-  anonKey:https://
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+    <script>
+        const supabase = supabase.createClient(
+            "https://avldlzkjprmqxmbgbclm.supabase.co",
+            "sb_publishable_CQHNtBi_q4PhwAIMkJ-Rxw_DicNz5Yr"
+  anonKey:sb_publishable_CQHNtBi_q4PhwAIMkJ-Rxw_DicNz5Yr
   vapidPublicKey:, // для Web Push, генерируется отдельно (см. README)
 };
-const SB_ENABLED = SUPABASE_CONFIG.url!== && SUPABASE_CONFIG.anonKey!==;
+const SB_ENABLED = SUPABASE_CONFIG.url!==sb_publishable_CQHNtBi_q4PhwAIMkJ-Rxw_DicNz5Yr && SUPABASE_CONFIG.anonKey!==sb_publishable_CQHNtBi_q4PhwAIMkJ-Rxw_DicNz5Yr;
 let sb=null, sbUser=null, sbProfile=null;
 if(SB_ENABLED && window.supabase){
   sb = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
