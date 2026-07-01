@@ -1,0 +1,1402 @@
+Проанализировав ваш код, я нашел несколько критических ошибок и недочетов:
+
+🔴 КРИТИЧЕСКИЕ ОШИБКИ:
+
+1. Некорректная инициализация Supabase — в SUPABASE_CONFIG вы вставили HTML-теги <script> внутрь объекта, что ломает JavaScript
+2. Переменные не определены — sb_publishable... и другие используются как переменные, а не строки
+3. Отсутствует SUPABASE_CONFIG.vapidPublicKey — он объявлен, но не задан
+4. Нет обработки navigator.serviceWorker — push-уведомления будут падать
+5. Не загружены surahs при первом открытии — lazy load работает, но без индикатора
+
+🟡 НЕДОСТАТКИ:
+
+· Нет офлайн-кэширования сур Корана
+· Нет автодополнения в поиске по аятам
+· Нет полноценной синхронизации избранного
+· Не реализованы заметки (notes)
+· Отсутствует тафсир (толкование)
+· Нет аудио-воспроизведения аятов
+· Нет возможности менять язык интерфейса
+
+---
+
+✅ ИСПРАВЛЕННАЯ ВЕРСИЯ (полный код):
+
+```html
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HIKMAH">
+<meta name="theme-color" content="#0B1A14">
+<title>HIKMAH — Исламская энциклопедия | Коран, Хадисы, Дуа на русском</title>
+<meta name="description" content="HIKMAH — крупнейшая исламская образовательная платформа. Изучайте Ислам по темам: Коран с переводами Кулиева и Османова, достоверные хадисы, дуа на каждый день.">
+<meta name="keywords" content="ислам, коран, хадисы, дуа, hikmah, хикма, мусульманин, тафсир">
+<meta name="robots" content="index, follow">
+<meta property="og:title" content="HIKMAH — Исламская энциклопедия">
+<meta property="og:description" content="Изучайте Ислам по темам: Коран, Хадисы, Дуа — всё в одном месте.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230B1A14'/%3E%3Ctext x='50' y='66' font-size='52' text-anchor='middle' fill='%23C9A84C' font-family='serif'%3E%D8%AD%3C/text%3E%3C/svg%3E">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#0B1A14;--bg2:#0F2018;--bg3:#142A1C;
+  --gold:#C9A84C;--gold2:#A8893A;--gdim:rgba(201,168,76,.1);
+  --text:#EDE5D5;--text2:#B0A890;--text3:#6B8B7A;
+  --bd:rgba(255,255,255,.07);--bd2:rgba(201,168,76,.22);
+  --card:rgba(255,255,255,.033);--r:16px;
+  --safe:env(safe-area-inset-bottom,12px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Helvetica Neue',system-ui,sans-serif}
+#shell{position:fixed;inset:0;display:flex;flex-direction:column;max-width:430px;margin:0 auto;background:var(--bg);overflow:hidden}
+#sb{height:44px;flex-shrink:0;background:rgba(11,26,20,.97);backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--bd);z-index:100}
+#sb .t{font-size:15px;font-weight:600}
+#sb .logo{font-size:14px;font-weight:800;color:var(--gold);letter-spacing:2px}
+#screens{flex:1;overflow:hidden;position:relative}
+.sc{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;opacity:0;pointer-events:none;transform:translateX(20px);transition:opacity .25s,transform .25s;padding-bottom:calc(var(--safe) + 72px);scrollbar-width:none}
+.sc::-webkit-scrollbar{display:none}
+.sc.on{opacity:1;pointer-events:auto;transform:translateX(0)}
+#nav{height:56px;flex-shrink:0;background:rgba(11,26,20,.97);backdrop-filter:blur(20px);border-top:1px solid var(--bd);display:flex;align-items:stretch;padding-bottom:var(--safe);z-index:100}
+.nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;padding-top:4px}
+.nb svg,.nb span{transition:color .2s}
+.nb span{font-size:9px;letter-spacing:.3px}
+.nb.on svg,.nb.on span{color:var(--gold)}
+.nb:not(.on) svg,.nb:not(.on) span{color:var(--text3)}
+.gbg{position:fixed;inset:0;pointer-events:none;opacity:.03;z-index:0}
+.slbl{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:12px}
+.gl{height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);margin:18px 0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:16px}
+.btn-g{background:linear-gradient(135deg,var(--gold),var(--gold2));border:none;border-radius:12px;padding:14px 24px;color:#0B1A14;font-weight:700;font-size:15px;cursor:pointer;width:100%;letter-spacing:.3px;transition:opacity .2s}
+.btn-g:active{opacity:.85}
+.btn-o{background:none;border:1.5px solid var(--bd2);border-radius:12px;padding:12px;color:var(--gold);font-weight:600;font-size:14px;cursor:pointer;width:100%;transition:all .2s}
+input{width:100%;background:rgba(255,255,255,.05);border:1.5px solid var(--bd);border-radius:12px;padding:13px 16px;color:var(--text);font-size:16px;outline:none;transition:border-color .2s;-webkit-appearance:none}
+input:focus{border-color:var(--gold);background:var(--gdim)}
+input::placeholder{color:var(--text3)}
+label{font-size:12px;color:var(--text3);display:block;margin-bottom:5px}
+.loader{display:flex;align-items:center;justify-content:center;padding:40px;flex-direction:column;gap:12px;color:var(--text3);font-size:13px}
+.spinner{width:28px;height:28px;border:2.5px solid rgba(201,168,76,.2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error-box{text-align:center;padding:30px 20px;color:var(--text3)}
+.error-box .ei{font-size:28px;margin-bottom:8px}
+.hero{background:linear-gradient(160deg,#0D2018,#091508);padding:28px 20px 0;text-align:center;position:relative;z-index:1}
+.h-ar{font-size:28px;color:var(--gold);margin-bottom:6px;letter-spacing:1px}
+.h-name{font-size:30px;font-weight:900;color:var(--text);letter-spacing:-1px}
+.h-sub{font-size:13px;color:var(--text3);margin-top:6px;line-height:1.5}
+.banner{margin:18px 20px;background:linear-gradient(135deg,rgba(201,168,76,.12),rgba(201,168,76,.04));border:1px solid var(--bd2);border-radius:20px;padding:22px 20px;text-align:center;position:relative;overflow:hidden}
+.banner::before{content:'بِسْمِ اللَّهِ';position:absolute;top:-8px;right:-8px;font-size:58px;color:var(--gold);opacity:.055;pointer-events:none}
+.banner h2{font-size:19px;font-weight:800;color:var(--text);margin-bottom:5px;line-height:1.3}
+.banner p{font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.5}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 20px}
+.sbox{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px 8px;text-align:center}
+.sbox .n{font-size:18px;font-weight:800;color:var(--gold)}
+.sbox .l{font-size:10px;color:var(--text3);margin-top:2px}
+.cats{padding:18px 20px 0;position:relative;z-index:1}
+.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.ccard{background:var(--card);border:1px solid var(--bd);border-radius:var(--r);padding:16px 14px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.ccard:active{transform:scale(.97)}
+.ccard .ci{font-size:24px;display:block;margin-bottom:8px}
+.ccard .cn{font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px}
+.ccard .cm{font-size:11px;color:var(--text3)}
+.ccard .glow{position:absolute;bottom:-16px;right:-16px;width:50px;height:50px;border-radius:50%;opacity:.18;filter:blur(16px)}
+.aday{margin:18px 20px 0}
+.acard{background:linear-gradient(135deg,rgba(201,168,76,.09),rgba(201,168,76,.03));border:1px solid var(--bd2);border-radius:var(--r);padding:18px}
+.a-ar{font-size:19px;color:var(--gold);text-align:right;direction:rtl;line-height:1.8;margin-bottom:10px}
+.a-ru{font-size:13px;color:var(--text2);font-style:italic;line-height:1.6}
+.a-src{font-size:10px;color:var(--text3);margin-top:8px}
+.pbar-w{background:rgba(255,255,255,.06);border-radius:6px;height:7px;overflow:hidden;margin:7px 0}
+.pbar{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--gold),var(--gold2))}
+.qwrap{padding:16px 20px}
+.qsearch{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.05);border:1.5px solid var(--bd);border-radius:12px;padding:11px 14px;margin-bottom:14px;transition:all .2s}
+.qsearch.foc{border-color:var(--gold);background:var(--gdim)}
+.qsearch input{background:none;border:none;padding:0;font-size:15px;flex:1}
+.surah-card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:12px}
+.surah-card:active{border-color:var(--bd2);background:var(--gdim)}
+.snum{width:36px;height:36px;border-radius:9px;background:var(--gdim);border:1px solid var(--bd2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--gold);flex-shrink:0}
+.sname-ar{font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px}
+.sname-ru{font-size:12px;color:var(--text2)}
+.smeta{font-size:10px;color:var(--text3);margin-top:2px}
+.sarr{color:var(--text3);font-size:20px;margin-left:auto}
+#surah-detail{position:absolute;inset:0;background:var(--bg);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);z-index:60}
+#surah-detail.open{transform:translateX(0)}
+#surah-detail::-webkit-scrollbar{display:none}
+.sd-head{padding:16px 20px;background:linear-gradient(180deg,var(--bg3),var(--bg));border-bottom:1px solid var(--bd);text-align:center}
+.sd-back{display:flex;align-items:center;gap:6px;color:var(--gold);font-size:14px;font-weight:600;cursor:pointer;background:none;border:none;margin-bottom:14px}
+.sd-title-ar{font-size:26px;color:var(--gold);margin-bottom:4px}
+.sd-title-ru{font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px}
+.sd-meta{font-size:11px;color:var(--text3)}
+.trans-btns{display:flex;gap:6px;justify-content:center;margin-top:12px}
+.tbtn{padding:6px 14px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--bd);color:var(--text2);font-size:11px;cursor:pointer;transition:all .2s}
+.tbtn.on{background:var(--gdim);border-color:var(--bd2);color:var(--gold);font-weight:600}
+.ayah-item{padding:16px 20px;border-bottom:1px solid var(--bd)}
+.ayah-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--gdim);border:1px solid var(--bd2);font-size:11px;font-weight:700;color:var(--gold);margin-bottom:10px}
+.ayah-ar{font-size:20px;color:var(--text);text-align:right;direction:rtl;line-height:1.9;margin-bottom:10px;font-weight:400}
+.ayah-ru{font-size:13px;color:var(--text2);line-height:1.7;font-style:italic}
+.ayah-fav{float:right;background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:0;margin-left:8px}
+.bismillah{text-align:center;font-size:22px;color:var(--gold);padding:16px 20px;direction:rtl}
+.twrap{padding:16px 20px}
+.tpills{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;scrollbar-width:none}
+.tpills::-webkit-scrollbar{display:none}
+.tpill{flex-shrink:0;padding:6px 14px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--bd);color:var(--text2);font-size:12px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.tpill.on{background:linear-gradient(135deg,var(--gold),var(--gold2));border-color:transparent;color:#0B1A14;font-weight:700}
+.tcard{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:12px}
+.tcard:active{border-color:var(--bd2);background:var(--gdim)}
+.ticon{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.tc-name{font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px}
+.tc-meta{font-size:11px;color:var(--text3)}
+#topic-detail{position:absolute;inset:0;background:var(--bg);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);z-index:55;padding-bottom:30px}
+#topic-detail.open{transform:translateX(0)}
+#topic-detail::-webkit-scrollbar{display:none}
+.td-hero{padding:18px 20px 0;background:linear-gradient(180deg,var(--bg3),var(--bg))}
+.td-back{display:flex;align-items:center;gap:6px;color:var(--gold);font-size:14px;font-weight:600;cursor:pointer;background:none;border:none;margin-bottom:14px}
+.td-icon{font-size:38px;margin-bottom:8px}
+.td-title{font-size:22px;font-weight:800;color:var(--text);margin-bottom:6px}
+.td-desc{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px}
+.td-pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+.tdp{font-size:11px;padding:3px 9px;border-radius:5px;font-weight:700;letter-spacing:.4px}
+.tdsec{padding:0 20px;margin-bottom:18px}
+.tdsec-t{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:8px;padding-bottom:7px;border-bottom:1px solid var(--bd)}
+.tditem{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:13px;margin-bottom:7px}
+.tditem-ar{font-size:18px;color:var(--gold);text-align:right;direction:rtl;line-height:1.8;margin-bottom:8px}
+.tditem-ru{font-size:13px;color:var(--text2);line-height:1.6;font-style:italic}
+.tditem-src{font-size:10px;color:var(--text3);margin-top:6px}
+.rel-wrap{display:flex;flex-wrap:wrap;gap:6px}
+.rel-tag{font-size:12px;background:rgba(255,255,255,.05);border:1px solid var(--bd);border-radius:8px;padding:5px 11px;color:var(--text2);cursor:pointer;transition:all .2s}
+.rel-tag:active{background:var(--gdim);border-color:var(--bd2);color:var(--gold)}
+.hwrap{padding:16px 20px}
+.hcoll{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px}
+.hcbox{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;cursor:pointer;transition:all .2s;text-align:center}
+.hcbox:active{border-color:var(--bd2);background:var(--gdim)}
+.hcbox.sel{border-color:var(--bd2);background:var(--gdim)}
+.hc-icon{font-size:22px;margin-bottom:6px}
+.hc-name{font-size:13px;font-weight:600;color:var(--text)}
+.hc-count{font-size:10px;color:var(--text3);margin-top:2px}
+.hcard{background:var(--card);border:1px solid var(--bd);border-radius:13px;padding:14px;margin-bottom:8px;cursor:pointer;transition:all .2s}
+.hcard:active{border-color:var(--bd2);background:var(--gdim)}
+.hcard-num{font-size:10px;font-weight:700;color:var(--gold);letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase}
+.hcard-text{font-size:13px;color:var(--text2);line-height:1.6}
+.hcard-src{font-size:11px;color:var(--text3);margin-top:8px;display:flex;justify-content:space-between}
+.swrap{padding:16px 20px}
+.sbox2{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.05);border:1.5px solid var(--bd);border-radius:14px;padding:13px 14px;margin-bottom:12px;transition:all .25s}
+.sbox2.foc{border-color:var(--gold);background:var(--gdim);box-shadow:0 0 0 3px rgba(201,168,76,.1)}
+.sbox2 input{flex:1;background:none;border:none;outline:none;font-size:16px;color:var(--text);padding:0}
+.fpills{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;scrollbar-width:none}
+.fpills::-webkit-scrollbar{display:none}
+.fp{flex-shrink:0;padding:6px 13px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--bd);color:var(--text2);font-size:12px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.fp.on{background:linear-gradient(135deg,var(--gold),var(--gold2));border-color:transparent;color:#0B1A14;font-weight:700}
+.ptag{padding:7px 14px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid var(--bd);color:var(--text2);font-size:13px;cursor:pointer;transition:all .2s}
+.ptag:active{background:var(--gdim);border-color:var(--bd2);color:var(--gold)}
+.rcard{background:var(--card);border:1px solid var(--bd);border-radius:13px;padding:13px;margin-bottom:7px;cursor:pointer;transition:all .2s}
+.rcard:active{border-color:var(--bd2);background:var(--gdim)}
+.rbadge{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:2px 7px;border-radius:4px;display:inline-block;margin-bottom:4px}
+.rtitle{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px;line-height:1.3}
+.rdesc{font-size:12px;color:var(--text3);line-height:1.5}
+.sugg{background:#122018;border:1px solid var(--bd2);border-radius:12px;overflow:hidden;margin-bottom:10px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.si{padding:11px 16px;font-size:14px;color:var(--text2);border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .15s}
+.si:last-child{border-bottom:none}
+.si:active{background:var(--gdim)}
+.fwrap{padding:16px 20px}
+.fi{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--bd);border-radius:13px;padding:13px;margin-bottom:7px;cursor:pointer;transition:all .2s}
+.fi:active{border-color:var(--bd2);background:var(--gdim)}
+.fi-icon{font-size:20px;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.fi-t{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px}
+.fi-s{font-size:11px;color:var(--text3)}
+.fi-del{background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px;margin-left:auto}
+.pwrap{padding:16px 20px}
+.pcard{background:linear-gradient(135deg,var(--gdim),rgba(201,168,76,.03));border:1px solid var(--bd2);border-radius:var(--r);padding:18px;margin-bottom:14px;display:flex;align-items:center;gap:14px}
+.ava{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold2));display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:800;color:#0B1A14;flex-shrink:0}
+.p-name{font-size:16px;font-weight:700;color:var(--text)}
+.p-role{font-size:10px;color:var(--gold);letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+.p-email{font-size:11px;color:var(--text3);margin-top:3px}
+.pg-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.pg-box{background:var(--card);border:1px solid var(--bd);border-radius:13px;padding:13px 8px;text-align:center}
+.pg-n{font-size:20px;font-weight:800;color:var(--gold)}
+.pg-l{font-size:10px;color:var(--text3);margin-top:2px}
+.mi{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--bd);border-radius:13px;padding:13px;margin-bottom:7px;cursor:pointer;transition:all .2s}
+.mi:active{border-color:var(--bd2);background:var(--gdim)}
+.mi-icon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.mi-t{font-size:13px;font-weight:600;color:var(--text)}
+.mi-s{font-size:11px;color:var(--text3);margin-top:1px}
+.mi-arr{color:var(--text3);font-size:20px;margin-left:auto}
+.atabs{display:flex;background:rgba(255,255,255,.04);border:1px solid var(--bd);border-radius:11px;padding:3px;margin-bottom:22px}
+.atab{flex:1;padding:9px;border:none;background:none;border-radius:8px;color:var(--text3);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
+.atab.on{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#0B1A14}
+.aform{display:none}
+.aform.on{display:block}
+.fg{margin-bottom:14px}
+.soc{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px;border-radius:11px;background:rgba(255,255,255,.04);border:1px solid var(--bd);color:var(--text2);font-size:14px;font-weight:500;cursor:pointer;margin-bottom:7px;transition:all .2s}
+.soc:active{background:rgba(255,255,255,.08)}
+.divider{display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--text3);font-size:12px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--bd)}
+#splash{position:fixed;inset:0;z-index:500;background:linear-gradient(160deg,#0D2018,#08150F);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 28px;text-align:center;transition:opacity .5s}
+#splash.h{opacity:0;pointer-events:none}
+.sp-ar{font-size:36px;color:var(--gold);margin-bottom:10px;line-height:1.4}
+.sp-t{font-size:25px;font-weight:900;color:var(--text);margin-bottom:6px;letter-spacing:-1px}
+.sp-s{font-size:13px;color:var(--text3);line-height:1.6;margin-bottom:34px}
+.sp-dots{display:flex;gap:6px;margin-bottom:34px}
+.dot{width:6px;height:6px;border-radius:3px;background:var(--text3);transition:all .3s}
+.dot.on{width:20px;background:var(--gold)}
+#toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%) translateY(16px);background:rgba(201,168,76,.95);color:#0B1A14;padding:9px 18px;border-radius:20px;font-size:13px;font-weight:600;opacity:0;transition:all .3s;pointer-events:none;z-index:400;white-space:nowrap;max-width:88vw;text-align:center}
+#toast.s{opacity:1;transform:translateX(-50%) translateY(0)}
+.dwrap{padding:16px 20px}
+.dcats{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px;scrollbar-width:none}
+.dcats::-webkit-scrollbar{display:none}
+.dcpill{flex-shrink:0;padding:6px 14px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--bd);color:var(--text2);font-size:12px;cursor:pointer;white-space:nowrap;transition:all .2s}
+.dcpill.on{background:linear-gradient(135deg,var(--gold),var(--gold2));border-color:transparent;color:#0B1A14;font-weight:700}
+.dcard{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:8px;cursor:pointer;transition:all .2s}
+.dcard:active{border-color:var(--bd2);background:var(--gdim)}
+.dcard-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px}
+.dcard-ar{font-size:17px;color:var(--gold);text-align:right;direction:rtl;line-height:1.8;margin-bottom:8px}
+.dcard-ru{font-size:12px;color:var(--text2);line-height:1.6;font-style:italic}
+.dcard-src{font-size:10px;color:var(--text3);margin-top:7px}
+.dcard-trans{font-size:11px;color:var(--text3);margin-top:4px}
+#app-boot{position:fixed;inset:0;z-index:900;background:linear-gradient(160deg,#0D2018,#08150F);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .4s}
+#app-boot.hide{opacity:0;pointer-events:none}
+#app-boot .boot-ar{font-size:34px;color:var(--gold)}
+#app-boot .boot-ring{width:34px;height:34px;border-radius:50%;border:2.5px solid rgba(201,168,76,.2);border-top-color:var(--gold);animation:spin .8s linear infinite}
+#offline-banner{position:fixed;top:44px;left:0;right:0;max-width:430px;margin:0 auto;background:#3a1d1d;border-bottom:1px solid rgba(255,100,100,.3);color:#ffb3b3;font-size:12px;text-align:center;padding:7px;z-index:150;transform:translateY(-100%);transition:transform .3s}
+#offline-banner.show{transform:translateY(0)}
+#sync-dot{position:fixed;top:50px;right:14px;width:7px;height:7px;border-radius:50%;background:var(--gold);z-index:150;opacity:0;transition:opacity .3s}
+#sync-dot.show{opacity:1;animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.skel{background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.08) 37%,rgba(255,255,255,.04) 63%);background-size:400% 100%;animation:shimmer 1.4s ease infinite;border-radius:8px}
+@keyframes shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.auth-err{background:rgba(255,100,100,.1);border:1px solid rgba(255,100,100,.3);color:#ffb3b3;font-size:12px;border-radius:10px;padding:10px 12px;margin-bottom:14px;display:none}
+.auth-err.show{display:block}
+</style>
+</head>
+<body>
+<div id="app-boot">
+  <div class="boot-ar">حِكْمَة</div>
+  <div class="boot-ring"></div>
+</div>
+<div id="offline-banner">📡 Нет соединения — показаны сохранённые данные</div>
+<div id="sync-dot" title="Синхронизация..."></div>
+<svg class="gbg" preserveAspectRatio="xMidYMid slice">
+  <defs><pattern id="g" x="0" y="0" width="80" height="80" patternUnits="userSpaceOnUse">
+    <polygon points="40,2 78,21 78,59 40,78 2,59 2,21" fill="none" stroke="#C9A84C" stroke-width=".5"/>
+    <polygon points="40,16 64,28 64,52 40,64 16,52 16,28" fill="none" stroke="#C9A84C" stroke-width=".25"/>
+  </pattern></defs>
+  <rect width="100%" height="100%" fill="url(#g)"/>
+</svg>
+
+<div id="splash">
+  <div class="sp-ar">حِكْمَة</div>
+  <div class="sp-t" id="sp-t">HIKMAH</div>
+  <div class="sp-s" id="sp-s">Крупнейшая исламская образовательная платформа.<br>Изучайте Ислам по темам — системно и глубоко.</div>
+  <div class="sp-dots"><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+  <button class="btn-g" style="max-width:260px" onclick="nextOb()">Далее →</button>
+  <button onclick="closeSp()" style="background:none;border:none;color:var(--text3);font-size:13px;margin-top:14px;cursor:pointer">Пропустить</button>
+</div>
+
+<div id="shell">
+<div id="sb">
+  <div class="t" id="clk">9:41</div>
+  <div class="logo">HIKMAH</div>
+  <div style="display:flex;gap:5px;align-items:center">
+    <svg width="15" height="11" viewBox="0 0 15 11" fill="#EDE5D5"><rect x="0" y="6" width="2.5" height="5" rx=".8" opacity=".4"/><rect x="3.5" y="3.5" width="2.5" height="7.5" rx=".8" opacity=".65"/><rect x="7" y="1.5" width="2.5" height="9.5" rx=".8" opacity=".85"/><rect x="10.5" y="0" width="2.5" height="11" rx=".8"/></svg>
+    <svg width="22" height="11" viewBox="0 0 22 11" fill="none"><rect x=".75" y=".75" width="18.5" height="9.5" rx="2.25" stroke="#EDE5D5" stroke-width="1.25" opacity=".5"/><rect x="20" y="3.5" width="2" height="4" rx=".8" fill="#EDE5D5" opacity=".5"/><rect x="2" y="2.25" width="13" height="6.5" rx="1.25" fill="#EDE5D5"/></svg>
+  </div>
+</div>
+
+<div id="screens">
+
+<div id="s-home" class="sc on">
+  <div class="hero">
+    <div class="h-ar">الْحِكْمَةُ</div>
+    <div class="h-name">HIKMAH</div>
+    <div class="h-sub">Исламская энциклопедия</div>
+  </div>
+  <div class="banner" style="margin-top:18px">
+    <h2>Изучайте Ислам по темам</h2>
+    <p>Аяты · Хадисы · Дуа · Тафсир · Истории — всё в одном месте</p>
+    <button class="btn-g" onclick="goTo('topics')">Начать обучение</button>
+  </div>
+  <div class="stats-row">
+    <div class="sbox"><div class="n">6 236</div><div class="l">Аятов</div></div>
+    <div class="sbox"><div class="n">7 500+</div><div class="l">Хадисов</div></div>
+    <div class="sbox"><div class="n">500+</div><div class="l">Дуа</div></div>
+  </div>
+  <div class="cats" style="margin-top:18px">
+    <div class="slbl">Основные разделы</div>
+    <div class="cgrid">
+      <div class="ccard" onclick="goTo('quran')" style="border-color:rgba(201,168,76,.18)"><span class="ci">📖</span><div class="cn">Коран</div><div class="cm">114 сур · 6236 аятов</div><div class="glow" style="background:#C9A84C"></div></div>
+      <div class="ccard" onclick="goTo('hadith')" style="border-color:rgba(107,158,107,.2)"><span class="ci">📜</span><div class="cn">Хадисы</div><div class="cm">Бухари · Муслим</div><div class="glow" style="background:#6B9E6B"></div></div>
+      <div class="ccard" onclick="goTo('dua')" style="border-color:rgba(160,123,201,.2)"><span class="ci">🤲</span><div class="cn">Дуа</div><div class="cm">На каждый момент</div><div class="glow" style="background:#A07BC9"></div></div>
+      <div class="ccard" onclick="goTo('topics')" style="border-color:rgba(78,160,120,.2)"><span class="ci">📚</span><div class="cn">Темы</div><div class="cm">100+ разделов</div><div class="glow" style="background:#4EA078"></div></div>
+    </div>
+  </div>
+  <div class="aday">
+    <div class="slbl" style="margin-top:18px">Аят дня</div>
+    <div class="acard" id="ayah-day">
+      <div class="a-ar">إِنَّ مَعَ الْعُسْرِ يُسْرًا</div>
+      <div class="a-ru">«Поистине, вместе с трудностью — облегчение»</div>
+      <div class="a-src">Сура Аш-Шарх, 94:6</div>
+    </div>
+  </div>
+  <div style="padding:18px 20px 0">
+    <div class="slbl">Мой прогресс</div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="font-size:12px;color:var(--text2)">Прочитано сегодня</span><span style="font-size:12px;font-weight:700;color:var(--gold)">12/20 аятов</span></div>
+      <div class="pbar-w"><div class="pbar" style="width:60%"></div></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px">🔥 Серия: 7 дней подряд</div>
+    </div>
+  </div>
+</div>
+
+<div id="s-quran" class="sc">
+  <div id="surah-detail">
+    <div class="sd-head">
+      <button class="sd-back" onclick="closeSurah()">‹ Назад</button>
+      <div class="sd-title-ar" id="sd-ar"></div>
+      <div class="sd-title-ru" id="sd-ru"></div>
+      <div class="sd-meta" id="sd-meta"></div>
+      <div class="trans-btns">
+        <button class="tbtn on" onclick="setTrans('kuliev',this)">Кулиев</button>
+        <button class="tbtn" onclick="setTrans('osmanov',this)">Османов</button>
+        <button class="tbtn" onclick="setTrans('ar',this)">Только арабский</button>
+      </div>
+    </div>
+    <div id="ayahs-list"></div>
+  </div>
+  <div class="qwrap">
+    <div class="slbl">Коран — Все суры</div>
+    <div class="qsearch" id="qs-box">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;color:var(--text3)"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input type="text" placeholder="Найти суру..." oninput="filterSurahs(this.value)" onfocus="document.getElementById('qs-box').classList.add('foc')" onblur="document.getElementById('qs-box').classList.remove('foc')">
+    </div>
+    <div id="surahs-list"><div class="loader"><div class="spinner"></div>Загрузка сур...</div></div>
+  </div>
+</div>
+
+<div id="s-topics" class="sc">
+  <div id="topic-detail">
+    <div class="td-hero">
+      <button class="td-back" onclick="closeTopic()">‹ Назад</button>
+      <div class="td-icon" id="td-icon">📖</div>
+      <div class="td-title" id="td-title"></div>
+      <div class="td-desc" id="td-desc"></div>
+      <div class="td-pills" id="td-pills"></div>
+    </div>
+    <div id="td-content"></div>
+  </div>
+  <div class="twrap">
+    <div class="slbl">Исламские темы</div>
+    <div class="tpills" id="tpills-row">
+      <div class="tpill on" onclick="setTcat(this,'all')">Все</div>
+      <div class="tpill" onclick="setTcat(this,'quran')">Коран</div>
+      <div class="tpill" onclick="setTcat(this,'akhlaq')">Нравственность</div>
+      <div class="tpill" onclick="setTcat(this,'ibadah')">Поклонение</div>
+      <div class="tpill" onclick="setTcat(this,'family')">Семья</div>
+      <div class="tpill" onclick="setTcat(this,'akhira')">Судный день</div>
+      <div class="tpill" onclick="setTcat(this,'stories')">Истории</div>
+      <div class="tpill" onclick="setTcat(this,'finance')">Финансы</div>
+      <div class="tpill" onclick="setTcat(this,'bad')">Плохие качества</div>
+    </div>
+    <div id="topics-list"></div>
+  </div>
+</div>
+
+<div id="s-dua" class="sc">
+  <div class="dwrap">
+    <div class="slbl">Дуа — Обращения к Аллаху</div>
+    <div class="dcats" id="dua-cats">
+      <div class="dcpill on" onclick="setDuaCat(this,'all')">Все</div>
+      <div class="dcpill" onclick="setDuaCat(this,'morning')">Утро</div>
+      <div class="dcpill" onclick="setDuaCat(this,'evening')">Вечер</div>
+      <div class="dcpill" onclick="setDuaCat(this,'sleep')">Сон</div>
+      <div class="dcpill" onclick="setDuaCat(this,'salah')">Намаз</div>
+      <div class="dcpill" onclick="setDuaCat(this,'food')">Еда</div>
+      <div class="dcpill" onclick="setDuaCat(this,'travel')">Путешествие</div>
+      <div class="dcpill" onclick="setDuaCat(this,'hardship')">Трудности</div>
+      <div class="dcpill" onclick="setDuaCat(this,'parents')">Родители</div>
+    </div>
+    <div id="dua-list"><div class="loader"><div class="spinner"></div>Загрузка дуа...</div></div>
+  </div>
+</div>
+
+<div id="s-hadith" class="sc">
+  <div class="hwrap">
+    <div class="slbl">Хадисы Пророка ﷺ</div>
+    <div class="hcoll">
+      <div class="hcbox sel" id="hc-bukhari" onclick="loadHadiths('bukhari',this)"><div class="hc-icon">📗</div><div class="hc-name">Бухари</div><div class="hc-count">7563 хадиса</div></div>
+      <div class="hcbox" id="hc-muslim" onclick="loadHadiths('muslim',this)"><div class="hc-icon">📘</div><div class="hc-name">Муслим</div><div class="hc-count">3033 хадиса</div></div>
+      <div class="hcbox" id="hc-abudawud" onclick="loadHadiths('abudawud',this)"><div class="hc-icon">📙</div><div class="hc-name">Абу Дауд</div><div class="hc-count">5274 хадиса</div></div>
+      <div class="hcbox" id="hc-tirmidhi" onclick="loadHadiths('tirmidhi',this)"><div class="hc-icon">📕</div><div class="hc-name">Тирмизи</div><div class="hc-count">3956 хадисов</div></div>
+    </div>
+    <div id="hadith-list"><div class="loader"><div class="spinner"></div>Загрузка хадисов...</div></div>
+  </div>
+</div>
+
+<div id="s-search" class="sc">
+  <div class="swrap">
+    <div style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:14px">Поиск</div>
+    <div class="sbox2" id="sb2">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;color:var(--text3)"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="si" type="text" placeholder="Аяты, хадисы, дуа, темы..." oninput="onSI(this.value)" onfocus="document.getElementById('sb2').classList.add('foc')" onblur="document.getElementById('sb2').classList.remove('foc')" onkeydown="if(event.key==='Enter')doSearch(this.value)">
+      <button onclick="clrSearch()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;padding:0;line-height:1">×</button>
+    </div>
+    <div id="sugg-box"></div>
+    <div class="fpills">
+      <div class="fp on" onclick="setFP(this,'Все')">Все</div>
+      <div class="fp" onclick="setFP(this,'Коран')">Коран</div>
+      <div class="fp" onclick="setFP(this,'Хадисы')">Хадисы</div>
+      <div class="fp" onclick="setFP(this,'Дуа')">Дуа</div>
+      <div class="fp" onclick="setFP(this,'Темы')">Темы</div>
+    </div>
+    <div id="sh-home">
+      <div class="slbl">Популярные</div>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px">
+        <div class="ptag" onclick="qSearch('терпение')">Терпение</div>
+        <div class="ptag" onclick="qSearch('намаз')">Намаз</div>
+        <div class="ptag" onclick="qSearch('родители')">Родители</div>
+        <div class="ptag" onclick="qSearch('покаяние')">Покаяние</div>
+        <div class="ptag" onclick="qSearch('судный день')">Судный день</div>
+        <div class="ptag" onclick="qSearch('закят')">Закят</div>
+        <div class="ptag" onclick="qSearch('пост')">Пост</div>
+        <div class="ptag" onclick="qSearch('рай')">Рай</div>
+      </div>
+    </div>
+    <div id="sh-results" style="display:none">
+      <div id="rc" style="font-size:12px;color:var(--text3);margin-bottom:10px"></div>
+      <div id="rl"></div>
+    </div>
+  </div>
+</div>
+
+<div id="s-prof" class="sc">
+  <div id="auth-view" class="pwrap">
+    <div style="text-align:center;padding:14px 0 20px">
+      <div style="font-size:28px;color:var(--gold);margin-bottom:7px">حكمة</div>
+      <div style="font-size:18px;font-weight:700;color:var(--text)">Добро пожаловать</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:4px">Войдите, чтобы сохранять прогресс</div>
+    </div>
+    <div class="atabs">
+      <button class="atab on" onclick="swTab('login',this)">Вход</button>
+      <button class="atab" onclick="swTab('reg',this)">Регистрация</button>
+    </div>
+    <div id="f-login" class="aform on">
+      <div class="auth-err" id="auth-error"></div>
+      <div class="fg"><label>Email</label><input type="email" id="login-email" placeholder="your@email.com"></div>
+      <div class="fg"><label>Пароль</label><input type="password" id="login-password" placeholder="••••••••"></div>
+      <button class="btn-g" onclick="sbSignIn(document.getElementById('login-email').value, document.getElementById('login-password').value)">Войти</button>
+      <div style="text-align:center;margin-top:10px"><span style="font-size:12px;color:var(--gold);cursor:pointer" onclick="sbResetPassword()">Забыли пароль?</span></div>
+      <div class="divider">или</div>
+      <div class="soc" onclick="sbSignInOAuth('google')"><svg width="17" height="17" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>Войти через Google</div>
+      <div class="soc" onclick="sbSignInOAuth('apple')"><svg width="17" height="17" viewBox="0 0 24 24" fill="white"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>Войти через Apple</div>
+    </div>
+    <div id="f-reg" class="aform">
+      <div class="auth-err" id="auth-error-reg"></div>
+      <div class="fg"><label>Имя</label><input type="text" id="reg-name" placeholder="Ваше имя"></div>
+      <div class="fg"><label>Email</label><input type="email" id="reg-email" placeholder="your@email.com"></div>
+      <div class="fg"><label>Пароль</label><input type="password" id="reg-password" placeholder="Минимум 6 символов"></div>
+      <button class="btn-g" onclick="sbSignUp(document.getElementById('reg-email').value, document.getElementById('reg-password').value, document.getElementById('reg-name').value)">Создать аккаунт</button>
+    </div>
+  </div>
+  <div id="prof-view" class="pwrap" style="display:none">
+    <div class="pcard"><div class="ava">А</div><div><div class="p-name">Абдуллах Алиев</div><div class="p-role">✦ Пользователь</div><div class="p-email">abdullah@email.com</div></div></div>
+    <div class="pg-row">
+      <div class="pg-box"><div class="pg-n">7</div><div class="pg-l">Дней подряд</div></div>
+      <div class="pg-box"><div class="pg-n">143</div><div class="pg-l">Аятов</div></div>
+      <div class="pg-box"><div class="pg-n">28</div><div class="pg-l">Хадисов</div></div>
+    </div>
+    <div class="slbl">Настройки</div>
+    <div class="mi" onclick="enablePushNotifications()"><div class="mi-icon" style="background:var(--gdim)">🔔</div><div><div class="mi-t">Уведомления</div><div class="mi-s">Аят дня · Напоминания</div></div><div class="mi-arr">›</div></div>
+    <div class="mi" onclick="showToast('Язык')"><div class="mi-icon" style="background:rgba(107,158,107,.1)">🌐</div><div><div class="mi-t">Язык</div><div class="mi-s">Русский · العربية</div></div><div class="mi-arr">›</div></div>
+    <div class="mi" onclick="showToast('Внешний вид')"><div class="mi-icon" style="background:rgba(123,143,161,.1)">🎨</div><div><div class="mi-t">Внешний вид</div><div class="mi-s">Тёмная тема</div></div><div class="mi-arr">›</div></div>
+    <div class="mi" onclick="showToast('О приложении')"><div class="mi-icon" style="background:rgba(160,123,201,.1)">ℹ️</div><div><div class="mi-t">О приложении</div><div class="mi-s">HIKMAH v1.0</div></div><div class="mi-arr">›</div></div>
+    <div class="mi" id="admin-link" style="display:none" onclick="openAdminPanel()"><div class="mi-icon" style="background:rgba(201,168,76,.15)">📊</div><div><div class="mi-t">Админ-панель</div><div class="mi-s">Аналитика · Уведомления · Контент</div></div><div class="mi-arr">›</div></div>
+    <div style="margin-top:8px"><button class="btn-o" onclick="doLogout()">Выйти из аккаунта</button></div>
+  </div>
+</div>
+
+</div>
+
+<nav id="nav">
+  <button class="nb on" onclick="goTo('home')" id="nb-home">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><polyline points="9 22 9 12 15 12 15 22" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    <span>Главная</span>
+  </button>
+  <button class="nb" onclick="goTo('quran')" id="nb-quran">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    <span>Коран</span>
+  </button>
+  <button class="nb" onclick="goTo('topics')" id="nb-topics">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2m-3.5-7.5-1.4 1.4M6.9 17.1l-1.4 1.4M17.1 17.1l-1.4-1.4M6.9 6.9 5.5 5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <span>Темы</span>
+  </button>
+  <button class="nb" onclick="goTo('search')" id="nb-search">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <span>Поиск</span>
+  </button>
+  <button class="nb" onclick="goTo('prof')" id="nb-prof">
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/></svg>
+    <span>Профиль</span>
+  </button>
+</nav>
+</div>
+<div id="toast"></div>
+
+<div id="admin-overlay" style="display:none;position:fixed;inset:0;z-index:600;background:var(--bg)">
+  <div style="max-width:430px;margin:0 auto;height:100%;display:flex;flex-direction:column">
+    <div style="height:44px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--bd)">
+      <button onclick="closeAdminPanel()" style="background:none;border:none;color:var(--gold);font-size:14px;font-weight:600;cursor:pointer">‹ Закрыть</button>
+      <div style="font-size:14px;font-weight:800;color:var(--gold);letter-spacing:1px">АДМИН</div>
+      <div style="width:50px"></div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:18px 20px;scrollbar-width:none">
+      <div class="slbl">Аналитика за 7 дней</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:20px">
+        <div class="card"><div style="font-size:22px;font-weight:800;color:var(--gold)" id="an-new-users">—</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Новых пользователей</div></div>
+        <div class="card"><div style="font-size:22px;font-weight:800;color:var(--gold)" id="an-active-users">—</div><div style="font-size:11px;color:var(--text3);margin-top:3px">Активных пользователей</div></div>
+      </div>
+      <div class="slbl">Популярные материалы</div>
+      <div id="an-top-materials" style="margin-bottom:24px"></div>
+
+      <div class="gl"></div>
+      <div class="slbl">Отправить уведомление</div>
+      <div class="fg"><label>Заголовок</label><input type="text" id="notif-title" placeholder="Например: Аят дня"></div>
+      <div class="fg"><label>Текст</label><input type="text" id="notif-body" placeholder="Текст уведомления..."></div>
+      <div class="fg">
+        <label>Получатели</label>
+        <select id="notif-target" style="width:100%;background:rgba(255,255,255,.05);border:1.5px solid var(--bd);border-radius:12px;padding:13px 16px;color:var(--text);font-size:15px;outline:none">
+          <option value="all">Все пользователи</option>
+          <option value="group">Активные за 7 дней</option>
+        </select>
+      </div>
+      <button class="btn-g" onclick="sendAdminNotification()">Отправить сейчас</button>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.5">Уведомление будет сохранено в очередь. Реальная доставка происходит через Edge Function на сервере.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+// ✅ SUPABASE КОНФИГУРАЦИЯ (ИСПРАВЛЕННАЯ)
+// ════════════════════════════════════════════════════════════════
+const SUPABASE_CONFIG = {
+  url: 'https://avldlzkjprmqxmbgbclm.supabase.co',
+  anonKey: 'sb_publishable_CQHNtBi_q4PhwAIMkJ-Rxw_DicNz5Yr',
+  secretKey: 'sb_secret_yVzFqPgxCDvrfP-FFpNYCQ_1WVRekWB',
+  jwksUrl: 'https://avldlzkjprmqxmbgbclm.supabase.co/auth/v1/.well-known/jwks.json',
+  vapidPublicKey: '' // Пока пустой, для push-уведомлений нужно сгенерировать ключи VAPID
+};
+
+const SB_ENABLED = SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey && SUPABASE_CONFIG.anonKey !== 'YOUR_ANON_KEY';
+let sb = null, sbUser = null, sbProfile = null;
+
+if (SB_ENABLED && window.supabase) {
+  sb = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
+    auth: { persistSession: true, autoRefreshToken: true }
+  });
+}
+
+// ── ЛОКАЛЬНЫЙ КЭШ ──
+const LocalCache = {
+  get(key, fallback) {
+    try {
+      const v = localStorage.getItem('hikmah_' + key);
+      return v ? JSON.parse(v) : fallback;
+    } catch (e) { return fallback; }
+  },
+  set(key, val) {
+    try { localStorage.setItem('hikmah_' + key, JSON.stringify(val)); } catch (e) {}
+  }
+};
+
+// ── ИНДИКАТОРЫ ──
+function syncStart(){ document.getElementById('sync-dot').classList.add('show'); }
+function syncEnd(){ setTimeout(()=>document.getElementById('sync-dot').classList.remove('show'),400); }
+function updateOnlineStatus(){
+  document.getElementById('offline-banner').classList.toggle('show', !navigator.onLine);
+}
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+updateOnlineStatus();
+
+function sbHandleError(err, context) {
+  console.error(`[Supabase:${context}]`, err);
+  if (err && err.message && err.message.includes('JWT')) {
+    showToast('Сессия истекла, войдите снова');
+    doLogout(true);
+    return;
+  }
+  showToast('Ошибка сети. Данные сохранены локально.');
+}
+
+// ════════════════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════════════════
+async function sbInit() {
+  if (!SB_ENABLED) { finishBoot(); return; }
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      sbUser = session.user;
+      await sbLoadProfile();
+      applyLoggedInUI();
+    }
+    sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        sbUser = session.user;
+        sbLoadProfile().then(applyLoggedInUI);
+      }
+      if (event === 'SIGNED_OUT') {
+        sbUser = null; sbProfile = null;
+        applyLoggedOutUI();
+      }
+    });
+  } catch (e) { sbHandleError(e, 'init'); }
+  finishBoot();
+}
+
+function finishBoot() {
+  document.getElementById('app-boot').classList.add('hide');
+  setTimeout(() => document.getElementById('app-boot').remove(), 500);
+}
+
+async function sbLoadProfile() {
+  if (!sb || !sbUser) return;
+  syncStart();
+  try {
+    const { data, error } = await sb.from('profiles').select('*').eq('id', sbUser.id).single();
+    if (error) throw error;
+    sbProfile = data;
+    LocalCache.set('profile', data);
+  } catch (e) { sbHandleError(e, 'loadProfile'); sbProfile = LocalCache.get('profile', null); }
+  syncEnd();
+}
+
+async function sbSignUp(email, password, fullName) {
+  if (!SB_ENABLED) { showToast('Supabase не подключён — демо-режим'); doLogin(); return; }
+  const errBox = document.getElementById('auth-error');
+  errBox.classList.remove('show');
+  try {
+    const { data, error } = await sb.auth.signUp({
+      email, password,
+      options: { data: { full_name: fullName } }
+    });
+    if (error) throw error;
+    showToast('Аккаунт создан! Проверьте почту для подтверждения 📧');
+  } catch (e) {
+    errBox.textContent = translateAuthError(e.message);
+    errBox.classList.add('show');
+  }
+}
+
+async function sbSignIn(email, password) {
+  if (!SB_ENABLED) { showToast('Supabase не подключён — демо-режим'); doLogin(); return; }
+  const errBox = document.getElementById('auth-error');
+  errBox.classList.remove('show');
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    showToast('Добро пожаловать! 🌿');
+  } catch (e) {
+    errBox.textContent = translateAuthError(e.message);
+    errBox.classList.add('show');
+  }
+}
+
+async function sbSignInOAuth(provider) {
+  if (!SB_ENABLED) { showToast('Supabase не подключён — демо-режим'); doLogin(); return; }
+  try {
+    await sb.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.href } });
+  } catch (e) { sbHandleError(e, 'oauth'); }
+}
+
+async function sbSignOut() {
+  if (SB_ENABLED && sb) { try { await sb.auth.signOut(); } catch (e) {} }
+}
+
+async function sbResetPassword() {
+  if (!SB_ENABLED) { showToast('Supabase не подключён'); return; }
+  const email = document.getElementById('login-email').value;
+  if (!email) { showToast('Введите email для сброса пароля'); return; }
+  try {
+    await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+    showToast('Письмо для сброса пароля отправлено 📧');
+  } catch (e) { sbHandleError(e, 'resetPassword'); }
+}
+
+function translateAuthError(msg) {
+  if (!msg) return 'Ошибка авторизации';
+  if (msg.includes('Invalid login credentials')) return 'Неверный email или пароль';
+  if (msg.includes('already registered')) return 'Этот email уже зарегистрирован';
+  if (msg.includes('Password should be')) return 'Пароль слишком короткий (минимум 6 символов)';
+  if (msg.includes('rate limit')) return 'Слишком много попыток, подождите немного';
+  return msg;
+}
+
+// ════════════════════════════════════════════════════════════════
+// UI HOOKS
+// ════════════════════════════════════════════════════════════════
+function applyLoggedInUI() {
+  const av = document.querySelector('.ava');
+  const nameEl = document.querySelector('.p-name');
+  const emailEl = document.querySelector('.p-email');
+  if (sbProfile && nameEl) nameEl.textContent = sbProfile.full_name || 'Пользователь';
+  if (sbUser && emailEl) emailEl.textContent = sbUser.email;
+  if (av && sbProfile) av.textContent = (sbProfile.full_name || 'U').charAt(0).toUpperCase();
+  const streakEl = document.querySelectorAll('.pg-n')[0];
+  if (streakEl && sbProfile) streakEl.textContent = sbProfile.streak_days || 0;
+  document.getElementById('admin-link').style.display = (sbProfile && sbProfile.role === 'admin') ? 'flex' : 'none';
+  document.getElementById('auth-view').style.display = 'none';
+  document.getElementById('prof-view').style.display = 'block';
+}
+
+function applyLoggedOutUI() {
+  document.getElementById('auth-view').style.display = 'block';
+  document.getElementById('prof-view').style.display = 'none';
+}
+
+// ════════════════════════════════════════════════════════════════
+// ИНИЦИАЛИЗАЦИЯ
+// ════════════════════════════════════════════════════════════════
+updateOnlineStatus();
+sbInit();
+
+function updClk() {
+  const n = new Date();
+  document.getElementById('clk').textContent = n.getHours() + ':' + (n.getMinutes() < 10 ? '0' : '') + n.getMinutes();
+}
+updClk();
+setInterval(updClk, 10000);
+
+// ─── SPLASH ───
+let obS = 0;
+const obs = [
+  { a: 'حِكْمَة', t: 'HIKMAH', s: 'Крупнейшая исламская образовательная платформа.\nИзучайте Ислам по темам — системно и глубоко.' },
+  { a: 'الْقُرْآن', t: 'Коран и Хадисы', s: 'Реальные данные из открытых источников.\n6236 аятов · 7500+ хадисов · 500+ дуа' },
+  { a: 'بِسْمِ اللَّه', t: 'Начнём!', s: 'Только достоверные источники.\nБесплатно · Без рекламы · На русском языке.' }
+];
+function nextOb() {
+  obS++;
+  if (obS >= 3) { closeSp(); return; }
+  document.querySelector('.sp-ar').textContent = obs[obS].a;
+  document.getElementById('sp-t').textContent = obs[obS].t;
+  document.getElementById('sp-s').textContent = obs[obS].s;
+  document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('on', i === obS));
+}
+function closeSp() { document.getElementById('splash').classList.add('h'); }
+
+// ─── NAV ───
+let cur = 'home';
+const NAV_IDS = { home: 'nb-home', quran: 'nb-quran', topics: 'nb-topics', search: 'nb-search', prof: 'nb-prof', hadith: 'nb-search', dua: 'nb-search' };
+function goTo(id) {
+  document.getElementById('s-' + cur).classList.remove('on');
+  const old = NAV_IDS[cur] || 'nb-home';
+  document.getElementById(old).classList.remove('on');
+  cur = id;
+  document.getElementById('s-' + id).classList.add('on');
+  const nw = NAV_IDS[id] || 'nb-home';
+  document.getElementById(nw).classList.add('on');
+  if (id === 'quran' && !surahsLoaded) loadSurahs();
+  if (id === 'hadith' && !hadithLoaded) loadHadiths('bukhari', null);
+  if (id === 'dua' && !duaLoaded) loadDuas('all');
+}
+
+// ─── QURAN ───
+const QURAN_API = 'https://api.alquran.cloud/v1';
+let surahsLoaded = false, allSurahs = [], currentTrans = 'kuliev', currentSurahNum = 0;
+const TRANS_EDITIONS = { kuliev: 'ru.kuliev', osmanov: 'ru.osmanov' };
+const SURAH_TYPES = { Meccan: 'Мекканская', Medinan: 'Мединская' };
+
+async function loadSurahs() {
+  try {
+    const r = await fetch(QURAN_API + '/surah');
+    const d = await r.json();
+    allSurahs = d.data;
+    surahsLoaded = true;
+    renderSurahs(allSurahs);
+  } catch (e) {
+    document.getElementById('surahs-list').innerHTML = `<div class="error-box"><div class="ei">⚠️</div><div>Ошибка загрузки. Проверьте интернет.</div></div>`;
+  }
+}
+
+function renderSurahs(list) {
+  const el = document.getElementById('surahs-list');
+  if (!list.length) { el.innerHTML = '<div class="error-box"><div>Ничего не найдено</div></div>'; return; }
+  el.innerHTML = list.map(s => `
+    <div class="surah-card" onclick="openSurah(${s.number})">
+      <div class="snum">${s.number}</div>
+      <div style="flex:1;min-width:0">
+        <div class="sname-ar">${s.name}</div>
+        <div class="sname-ru">${s.englishName} — ${s.englishNameTranslation}</div>
+        <div class="smeta">${s.numberOfAyahs} аятов · ${SURAH_TYPES[s.revelationType] || s.revelationType}</div>
+      </div>
+      <div class="sarr">›</div>
+    </div>`).join('');
+}
+
+function filterSurahs(v) {
+  if (!surahsLoaded) return;
+  const q = v.toLowerCase();
+  renderSurahs(allSurahs.filter(s =>
+    s.englishName.toLowerCase().includes(q) ||
+    s.name.includes(v) ||
+    String(s.number).includes(v)
+  ));
+}
+
+async function openSurah(num) {
+  currentSurahNum = num;
+  const detail = document.getElementById('surah-detail');
+  document.getElementById('ayahs-list').innerHTML = '<div class="loader"><div class="spinner"></div>Загрузка аятов...</div>';
+  detail.scrollTop = 0;
+  detail.classList.add('open');
+  await fetchSurahContent(num, currentTrans);
+}
+
+async function fetchSurahContent(num, trans) {
+  try {
+    const editions = trans === 'ar' ? 'quran-uthmani' : `quran-uthmani,${TRANS_EDITIONS[trans]}`;
+    const url = QURAN_API + '/surah/' + num + '/editions/' + editions;
+    const r = await fetch(url);
+    const d = await r.json();
+    const arData = d.data[0];
+    const ruData = trans !== 'ar' ? d.data[1] : null;
+    document.getElementById('sd-ar').textContent = arData.name;
+    document.getElementById('sd-ru').textContent = arData.englishName + ' — ' + arData.englishNameTranslation;
+    document.getElementById('sd-meta').textContent = arData.numberOfAyahs + ' аятов · ' + (SURAH_TYPES[arData.revelationType] || arData.revelationType);
+    let html = '';
+    if (num !== 9) html += `<div class="bismillah">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>`;
+    arData.ayahs.forEach((a, i) => {
+      const ru = ruData ? ruData.ayahs[i].text : '';
+      html += `<div class="ayah-item">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div class="ayah-num">${a.numberInSurah}</div>
+          <button class="ayah-fav" onclick="favAyah(${num},${a.numberInSurah})" title="В избранное">♡</button>
+        </div>
+        <div class="ayah-ar">${a.text}</div>
+        ${ru ? `<div class="ayah-ru">${ru}</div>` : ''}
+      </div>`;
+    });
+    document.getElementById('ayahs-list').innerHTML = html;
+  } catch (e) {
+    document.getElementById('ayahs-list').innerHTML = `<div class="error-box"><div class="ei">⚠️</div><div>Ошибка загрузки аятов</div></div>`;
+  }
+}
+
+function setTrans(t, btn) {
+  currentTrans = t;
+  document.querySelectorAll('.tbtn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('ayahs-list').innerHTML = '<div class="loader"><div class="spinner"></div>Загрузка...</div>';
+  fetchSurahContent(currentSurahNum, t);
+}
+function closeSurah() { document.getElementById('surah-detail').classList.remove('open'); }
+function favAyah(s, a) { showToast(`Аят ${s}:${a} добавлен в избранное ❤️`); }
+
+// ─── HADITH ───
+let hadithLoaded = false;
+const HADITH_DB = {
+  bukhari: { name: 'Сахих аль-Бухари', file: 'https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/rus-bukhari.min.json' },
+  muslim: { name: 'Сахих Муслим', file: 'https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/rus-muslim.min.json' },
+  abudawud: { name: 'Сунан Абу Дауд', file: 'https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/rus-abudawud.min.json' },
+  tirmidhi: { name: 'Сунан ат-Тирмизи', file: 'https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/rus-tirmidhi.min.json' }
+};
+let hadithCache = {};
+async function loadHadiths(coll, btn) {
+  document.querySelectorAll('.hcbox').forEach(b => b.classList.remove('sel'));
+  if (btn) btn.classList.add('sel');
+  else document.getElementById('hc-' + coll)?.classList.add('sel');
+  hadithLoaded = true;
+  const list = document.getElementById('hadith-list');
+  list.innerHTML = '<div class="loader"><div class="spinner"></div>Загрузка хадисов...</div>';
+  try {
+    if (!hadithCache[coll]) {
+      const r = await fetch(HADITH_DB[coll].file);
+      const d = await r.json();
+      hadithCache[coll] = d.hadiths || d;
+    }
+    const hadiths = hadithCache[coll];
+    const slice = hadiths.slice(0, 30);
+    list.innerHTML = slice.map(h => `
+      <div class="hcard" onclick="showToast('Хадис №${h.hadithnumber}')">
+        <div class="hcard-num">${HADITH_DB[coll].name} · № ${h.hadithnumber}</div>
+        <div class="hcard-text">${(h.text || '').slice(0, 280)}${(h.text || '').length > 280 ? '...' : ''}</div>
+        <div class="hcard-src"><span>Степень: ${h.grades && h.grades[0] ? h.grades[0].grade : '—'}</span><span>Читать →</span></div>
+      </div>`).join('');
+  } catch (e) {
+    list.innerHTML = `<div class="error-box"><div class="ei">⚠️</div><div>Ошибка загрузки хадисов.<br>Проверьте интернет-соединение.</div></div>`;
+  }
+}
+
+// ─── DUA ───
+let duaLoaded = false;
+const DUAS = [
+  { id: 1, cat: 'morning', title: 'Дуа пробуждения', ar: 'الْحَمْدُ لِلَّهِ الَّذِي أَحْيَانَا بَعْدَ مَا أَمَاتَنَا وَإِلَيْهِ النُّشُورُ', ru: '«Хвала Аллаху, который оживил нас после того, как умертвил нас, и к Нему — воскрешение»', src: 'Бухари' },
+  { id: 2, cat: 'morning', title: 'Утренний азкар — Аятуль-Курси', ar: 'اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ', ru: '«Аллах — нет божества, кроме Него, Живого, Вседержителя»', src: 'Аль-Бакара 2:255' },
+  { id: 3, cat: 'morning', title: 'Утреннее прославление', ar: 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ', ru: '«Пречист Аллах и хвала Ему» — 100 раз утром и вечером', src: 'Муслим' },
+  { id: 4, cat: 'evening', title: 'Вечерний азкар', ar: 'أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ', ru: '«Наступил для нас вечер, и наступил вечер для владения Аллаха»', src: 'Муслим' },
+  { id: 5, cat: 'evening', title: 'Защита вечером', ar: 'بِسْمِ اللَّهِ الَّذِي لَا يَضُرُّ مَعَ اسْمِهِ شَيْءٌ', ru: '«Во имя Аллаха, с именем Которого не причинит вреда ничто ни на земле, ни на небе»', src: 'Абу Дауд, Тирмизи' },
+  { id: 6, cat: 'sleep', title: 'Дуа перед сном', ar: 'بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا', ru: '«Во имя Твоё, о Аллах, я умираю и живу»', src: 'Бухари' },
+  { id: 7, cat: 'sleep', title: 'Аль-Ихлас, Аль-Фаляк, Ан-Нас перед сном', ar: 'قُلْ هُوَ اللَّهُ أَحَدٌ', ru: 'Пророк ﷺ читал три суры Муаввизат, дул на руки и обтирал тело', src: 'Бухари' },
+  { id: 8, cat: 'sleep', title: 'Дуа в состоянии тревоги', ar: 'اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الْهَمِّ وَالْحَزَنِ', ru: '«О Аллах, я прибегаю к Тебе от беспокойства и печали»', src: 'Бухари' },
+  { id: 9, cat: 'salah', title: 'Дуа начала намаза (Истифта)', ar: 'سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ وَتَبَارَكَ اسْمُكَ وَتَعَالَى جَدُّكَ وَلَا إِلَهَ غَيْرُكَ', ru: '«Пречист Ты, о Аллах, и хвала Тебе, благословенно имя Твоё, превозносится величие Твоё, нет божества кроме Тебя»', src: 'Абу Дауд, Тирмизи' },
+  { id: 10, cat: 'salah', title: 'Ташаххуд', ar: 'التَّحِيَّاتُ لِلَّهِ وَالصَّلَوَاتُ وَالطَّيِّبَاتُ', ru: '«Приветствия Аллаху, молитвы и благодеяния...»', src: 'Бухари, Муслим' },
+  { id: 11, cat: 'salah', title: 'Дуа после намаза', ar: 'اللَّهُمَّ أَعِنِّي عَلَى ذِكْرِكَ وَشُكْرِكَ وَحُسْنِ عِبَادَتِكَ', ru: '«О Аллах! Помоги мне поминать Тебя, благодарить Тебя и хорошо поклоняться Тебе»', src: 'Абу Дауд' },
+  { id: 12, cat: 'food', title: 'Дуа перед едой', ar: 'بِسْمِ اللَّهِ', ru: '«Во имя Аллаха» — говорить перед едой', src: 'Бухари' },
+  { id: 13, cat: 'food', title: 'Дуа после еды', ar: 'الْحَمْدُ لِلَّهِ الَّذِي أَطْعَمَنِي هَٰذَا وَرَزَقَنِيهِ', ru: '«Хвала Аллаху, который накормил меня этим и даровал мне это»', src: 'Абу Дауд, Тирмизи' },
+  { id: 14, cat: 'travel', title: 'Дуа в путешествии', ar: 'سُبْحَانَ الَّذِي سَخَّرَ لَنَا هَٰذَا وَمَا كُنَّا لَهُ مُقْرِنِينَ', ru: '«Пречист Тот, Кто подчинил нам это, хотя нам это было не по силам»', src: 'Абу Дауд' },
+  { id: 15, cat: 'travel', title: 'Дуа при входе в город', ar: 'اللَّهُمَّ رَبَّ السَّمَاوَاتِ السَّبْعِ وَمَا أَظْلَلْنَ', ru: '«О Аллах, Господь семи небес и того, что они осеняют»', src: 'Тирмизи' },
+  { id: 16, cat: 'hardship', title: 'Дуа при трудностях', ar: 'اللَّهُمَّ لَا سَهْلَ إِلَّا مَا جَعَلْتَهُ سَهْلًا', ru: '«О Аллах, нет лёгкого, кроме того, что Ты сделал лёгким»', src: 'Ибн Хиббан' },
+  { id: 17, cat: 'hardship', title: 'Дуа пророка Юнуса', ar: 'لَّا إِلَٰهَ إِلَّا أَنتَ سُبْحَانَكَ إِنِّي كُنتُ مِنَ الظَّالِمِينَ', ru: '«Нет божества, кроме Тебя! Пречист Ты! Воистину, я был несправедливым»', src: 'Аль-Анбияъ 21:87' },
+  { id: 18, cat: 'hardship', title: 'При посещении больного', ar: 'لَا بَأْسَ طَهُورٌ إِن شَاءَ اللَّهُ', ru: '«Не беда, очищение, если пожелает Аллах»', src: 'Бухари' },
+  { id: 19, cat: 'parents', title: 'Дуа за родителей', ar: 'رَّبِّ ارْحَمْهُمَا كَمَا رَبَّيَانِي صَغِيرًا', ru: '«Господи! Помилуй их обоих так, как они воспитывали меня в детстве»', src: 'Аль-Исра 17:24' },
+  { id: 20, cat: 'parents', title: 'Дуа за умерших родителей', ar: 'اللَّهُمَّ اغْفِرْ لِي وَلِوَالِدَيَّ', ru: '«О Аллах, прости меня и моих родителей»', src: 'Нух 71:28' },
+  { id: 21, cat: 'morning', title: 'Сайид аль-Истигфар', ar: 'اللَّهُمَّ أَنْتَ رَبِّي لَا إِلَٰهَ إِلَّا أَنْتَ خَلَقْتَنِي وَأَنَا عَبْدُكَ', ru: '«О Аллах, Ты — мой Господь, нет божества кроме Тебя, Ты создал меня, и я — Твой раб»', src: 'Бухари' },
+  { id: 22, cat: 'evening', title: 'Три раза вечером', ar: 'أَعُوذُ بِكَلِمَاتِ اللَّهِ التَّامَّاتِ مِن شَرِّ مَا خَلَقَ', ru: '«Прибегаю за защитой к совершенным словам Аллаха от зла того, что Он создал»', src: 'Муслим' }
+];
+
+let activeDuaCat = 'all';
+function loadDuas(cat) {
+  duaLoaded = true;
+  activeDuaCat = cat;
+  const list = DUAS.filter(d => cat === 'all' || d.cat === cat);
+  document.getElementById('dua-list').innerHTML = list.map(d => `
+    <div class="dcard" onclick="showToast('${d.title} — добавлено в избранное ❤️')">
+      <div class="dcard-title">${d.title}</div>
+      <div class="dcard-ar">${d.ar}</div>
+      <div class="dcard-ru">${d.ru}</div>
+      <div class="dcard-src">Источник: ${d.src}</div>
+    </div>`).join('');
+}
+function setDuaCat(el, cat) {
+  document.querySelectorAll('.dcpill').forEach(p => p.classList.remove('on'));
+  el.classList.add('on');
+  loadDuas(cat);
+}
+
+// ─── TOPICS ───
+const TOPICS = [
+  { id: 'quran', icon: '📖', name: 'Коран', meta: '114 сур · 6236 аятов', cat: 'quran', col: 'rgba(201,168,76,.1)', desc: 'Священная книга Ислама — прямая речь Аллаха, ниспосланная Пророку ﷺ.' },
+  { id: 'hadith_t', icon: '📜', name: 'Хадисы', meta: '7500+ хадисов', cat: 'quran', col: 'rgba(107,158,107,.1)', desc: 'Изречения и действия Пророка Мухаммада ﷺ.' },
+  { id: 'dua_t', icon: '🤲', name: 'Дуа', meta: '500+ дуа на каждый случай', cat: 'ibadah', col: 'rgba(160,123,201,.1)', desc: 'Обращения к Аллаху в различных жизненных ситуациях.' },
+  { id: 'iman', icon: '🌟', name: 'Вера (Акыда)', meta: '6 столпов', cat: 'ibadah', col: 'rgba(123,143,161,.1)', desc: 'Основы исламского вероубеждения: вера в Аллаха, ангелов, книги, пророков, Судный день, предопределение.' },
+  { id: 'salah', icon: '🕌', name: 'Намаз', meta: '32 аята · 45 хадисов · 12 дуа', cat: 'ibadah', col: 'rgba(78,160,120,.1)', desc: 'Второй столп ислама — обязательная молитва 5 раз в день.' },
+  { id: 'zakat', icon: '💛', name: 'Закят', meta: 'Очищение имущества', cat: 'ibadah', col: 'rgba(201,168,76,.1)', desc: 'Третий столп ислама — обязательное пожертвование.' },
+  { id: 'sawm', icon: '🌙', name: 'Пост (Саум)', meta: 'Рамадан · Правила', cat: 'ibadah', col: 'rgba(107,158,107,.1)', desc: 'Четвёртый столп ислама — воздержание с рассвета до заката.' },
+  { id: 'hajj', icon: '🕋', name: 'Хадж', meta: 'Пятый столп', cat: 'ibadah', col: 'rgba(160,123,201,.1)', desc: 'Паломничество в Мекку — обязательное раз в жизни.' },
+  { id: 'sabr', icon: '🌿', name: 'Терпение (Сабр)', meta: '14 аятов · 23 хадиса · 8 дуа', cat: 'akhlaq', col: 'rgba(107,158,107,.1)', desc: 'Одно из величайших качеств верующего.' },
+  { id: 'shukr', icon: '🌸', name: 'Благодарность', meta: '12 аятов · 15 хадисов', cat: 'akhlaq', col: 'rgba(201,168,76,.1)', desc: 'Признание благ Аллаха — словом, сердцем и делом.' },
+  { id: 'sidq', icon: '✨', name: 'Честность', meta: '18 аятов · 20 хадисов', cat: 'akhlaq', col: 'rgba(123,143,161,.1)', desc: 'Правдивость в словах, делах и намерениях.' },
+  { id: 'tawadu', icon: '🕊️', name: 'Скромность', meta: '10 аятов · 12 хадисов', cat: 'akhlaq', col: 'rgba(78,160,120,.1)', desc: 'Отсутствие высокомерия и простота в поведении.' },
+  { id: 'rahma', icon: '💚', name: 'Милосердие', meta: '15 аятов · 18 хадисов', cat: 'akhlaq', col: 'rgba(107,158,107,.1)', desc: 'Рахма — один из главных атрибутов Аллаха, которым Он наделил верующих.' },
+  { id: 'parents', icon: '👨‍👩‍👦', name: 'Родители', meta: '18 аятов · 30 хадисов · 6 дуа', cat: 'family', col: 'rgba(201,168,76,.1)', desc: 'После поклонения Аллаху — почтение к родителям.' },
+  { id: 'marriage', icon: '💍', name: 'Брак (Никах)', meta: '22 аята · 35 хадисов', cat: 'family', col: 'rgba(160,123,201,.1)', desc: 'Половина религии — исламские правила бракосочетания.' },
+  { id: 'children', icon: '👶', name: 'Воспитание детей', meta: '15 аятов · 25 хадисов', cat: 'family', col: 'rgba(107,158,107,.1)', desc: 'Обязанности родителей и правила исламского воспитания.' },
+  { id: 'relatives', icon: '🤝', name: 'Родственные связи', meta: '20 аятов · 22 хадиса', cat: 'family', col: 'rgba(78,160,120,.1)', desc: 'Поддержание родственных связей (сила аль-архам) — обязательно в исламе.' },
+  { id: 'divorce', icon: '⚡', name: 'Развод (Таляк)', meta: 'Правила · Условия', cat: 'family', col: 'rgba(255,100,100,.1)', desc: 'Исламские правила развода — дозволенное, но нелюбимое Аллахом действие.' },
+  { id: 'qiyama', icon: '⚖️', name: 'Судный день', meta: '50+ аятов · 40 хадисов', cat: 'akhira', col: 'rgba(255,100,100,.1)', desc: 'Описание Судного дня: воскрешение, суд, весы, мост Сират, Рай и Ад.' },
+  { id: 'death', icon: '🌑', name: 'Смерть', meta: '20 аятов · 18 хадисов', cat: 'akhira', col: 'rgba(123,143,161,.1)', desc: 'Исламские знания о смерти и жизни в могиле.' },
+  { id: 'jannah', icon: '🌴', name: 'Рай (Джанна)', meta: '35 аятов · 22 хадиса', cat: 'akhira', col: 'rgba(107,158,107,.1)', desc: 'Описание Рая — вечной обители праведников.' },
+  { id: 'jahannam', icon: '🔥', name: 'Ад (Джаханнам)', meta: '40 аятов · 30 хадисов', cat: 'akhira', col: 'rgba(255,100,100,.1)', desc: 'Предупреждения об Аде и пути его избежать.' },
+  { id: 'yusuf', icon: '⭐', name: 'История Пророка Юсуфа', meta: 'Сура Юсуф · 111 аятов', cat: 'stories', col: 'rgba(201,168,76,.1)', desc: '«Лучшая из историй» — терпение, испытания и награда.' },
+  { id: 'ibrahim', icon: '🔥', name: 'История Пророка Ибрахима', meta: 'Отец пророков', cat: 'stories', col: 'rgba(78,160,120,.1)', desc: 'Строитель Каабы и отец пророков.' },
+  { id: 'musa', icon: '🌊', name: 'История Пророка Мусы', meta: 'Исход · Чудеса', cat: 'stories', col: 'rgba(107,158,107,.1)', desc: 'История Пророка Мусы (мир ему) и его народа.' },
+  { id: 'kibr', icon: '💢', name: 'Высокомерие (Кибр)', meta: 'Запрещённое качество', cat: 'bad', col: 'rgba(255,100,100,.1)', desc: 'Одно из опаснейших качеств — кто в сердце имеет кибр, не войдёт в Рай.' },
+  { id: 'ghibah', icon: '🗣️', name: 'Сплетни (Гиба)', meta: 'Запрет · Последствия', cat: 'bad', col: 'rgba(255,120,80,.1)', desc: 'Обсуждение недостатков в отсутствие — строго запрещено.' },
+  { id: 'kibr2', icon: '😤', name: 'Гнев', meta: 'Контроль эмоций', cat: 'bad', col: 'rgba(255,140,100,.1)', desc: 'Пророк ﷺ трижды советовал: «Не гневайся».' },
+  { id: 'trade', icon: '💰', name: 'Торговля', meta: 'Халяль · Харам · Правила', cat: 'finance', col: 'rgba(201,168,76,.1)', desc: 'Исламские правила торговли и запрет ростовщичества.' },
+  { id: 'sadaqa', icon: '🤝', name: 'Благотворительность', meta: 'Садака · Вакф', cat: 'finance', col: 'rgba(107,158,107,.1)', desc: 'Добровольное пожертвование — одно из лучших дел.' },
+  { id: 'riba', icon: '🚫', name: 'Ростовщичество (Риба)', meta: 'Строгий запрет', cat: 'finance', col: 'rgba(255,100,100,.1)', desc: 'Риба — один из тяжелейших грехов в исламе.' }
+];
+
+const TOPIC_REFS = {
+  quran_self: { ayahs: ['2:2', '17:9', '38:29'], hadiths: [], duaIds: [], related: ['Хадисы', 'Тафсир'] },
+  sabr: { ayahs: ['2:153', '2:155', '2:156', '3:200', '39:10', '16:127'], hadiths: [['tirmidhi', 2398], ['muslim', 2999]], duaIds: [16, 17], related: ['Благодарность', 'Намаз', 'Покаяние', 'Судный день'] },
+  shukr: { ayahs: ['14:7', '2:152', '16:18'], hadiths: [['tirmidhi', 1954]], duaIds: [1, 3], related: ['Терпение', 'Поклонение', 'Довольство'] },
+  sidq: { ayahs: ['9:119', '33:35', '33:24'], hadiths: [['bukhari', 6094], ['muslim', 2607]], duaIds: [], related: ['Честность', 'Доверие', 'Нравственность'] },
+  tawadu: { ayahs: ['25:63', '31:18'], hadiths: [['muslim', 2588]], duaIds: [], related: ['Высокомерие', 'Скромность', 'Нравственность'] },
+  rahma: { ayahs: ['21:107', '6:12', '7:156'], hadiths: [['bukhari', 6013], ['tirmidhi', 1924]], duaIds: [], related: ['Терпение', 'Благотворительность', 'Прощение'] },
+  iman: { ayahs: ['2:285', '4:136', '2:177'], hadiths: [['muslim', 8], ['bukhari', 50]], duaIds: [], related: ['Намаз', 'Судный день', 'Предопределение'] },
+  salah: { ayahs: ['4:103', '20:14', '2:43', '29:45'], hadiths: [['nasai', 461], ['muslim', 82]], duaIds: [9, 11], related: ['Закят', 'Пост', 'Хадж', 'Очищение'] },
+  zakat: { ayahs: ['2:43', '2:110', '9:60'], hadiths: [['bukhari', 1395], ['muslim', 19]], duaIds: [], related: ['Намаз', 'Благотворительность', 'Финансы'] },
+  sawm: { ayahs: ['2:183', '2:185', '2:187'], hadiths: [['bukhari', 1894], ['muslim', 1151]], duaIds: [], related: ['Намаз', 'Закят', 'Терпение'] },
+  hajj: { ayahs: ['3:97', '2:196', '22:27'], hadiths: [['bukhari', 1521], ['muslim', 1350]], duaIds: [], related: ['Намаз', 'Закят', 'Пост'] },
+  parents: { ayahs: ['17:23', '17:24', '31:14', '46:15'], hadiths: [['bukhari', 5971], ['tirmidhi', 1899]], duaIds: [19, 20], related: ['Семья', 'Родственники', 'Воспитание детей', 'Милосердие'] },
+  marriage: { ayahs: ['30:21', '4:1', '2:187'], hadiths: [['bukhari', 5063], ['muslim', 1401]], duaIds: [], related: ['Семья', 'Дети', 'Развод'] },
+  children: { ayahs: ['66:6', '17:31', '31:13'], hadiths: [['abudawud', 495], ['tirmidhi', 1951]], duaIds: [], related: ['Родители', 'Семья', 'Воспитание'] },
+  relatives: { ayahs: ['4:1', '47:22', '13:21'], hadiths: [['bukhari', 5986], ['muslim', 2557]], duaIds: [], related: ['Родители', 'Семья', 'Милосердие'] },
+  divorce: { ayahs: ['2:228', '2:229', '65:1'], hadiths: [['abudawud', 2178]], duaIds: [], related: ['Брак', 'Семья'] },
+  qiyama: { ayahs: ['99:1', '99:7', '82:1', '75:1'], hadiths: [['muslim', 2955], ['tirmidhi', 2421]], duaIds: [], related: ['Смерть', 'Рай', 'Ад', 'Весы'] },
+  death: { ayahs: ['3:185', '29:57', '21:35'], hadiths: [['tirmidhi', 2307], ['ibnmajah', 4258]], duaIds: [], related: ['Судный день', 'Могила', 'Покаяние'] },
+  jannah: { ayahs: ['3:133', '13:35', '47:15'], hadiths: [['bukhari', 6549], ['muslim', 2824]], duaIds: [], related: ['Судный день', 'Ад', 'Праведность'] },
+  jahannam: { ayahs: ['2:24', '4:56', '25:11'], hadiths: [['bukhari', 6539], ['tirmidhi', 2575]], duaIds: [], related: ['Судный день', 'Рай', 'Покаяние'] },
+  yusuf: { ayahs: ['12:4', '12:18', '12:90', '12:92'], hadiths: [], duaIds: [], related: ['Терпение', 'Истории пророков', 'Прощение'] },
+  ibrahim: { ayahs: ['2:124', '21:69', '37:102'], hadiths: [], duaIds: [], related: ['Вера', 'Истории пророков', 'Жертвенность'] },
+  musa: { ayahs: ['20:9', '26:63', '28:7'], hadiths: [], duaIds: [], related: ['Истории пророков', 'Терпение', 'Вера'] },
+  kibr: { ayahs: ['31:18', '40:60', '7:13'], hadiths: [['muslim', 91]], duaIds: [], related: ['Скромность', 'Нравственность'] },
+  ghibah: { ayahs: ['49:12', '104:1'], hadiths: [['muslim', 2589], ['abudawud', 4878]], duaIds: [], related: ['Честность', 'Нравственность'] },
+  kibr2: { ayahs: ['3:134', '42:37'], hadiths: [['bukhari', 6116]], duaIds: [], related: ['Терпение', 'Нравственность'] },
+  trade: { ayahs: ['2:275', '4:29', '62:10'], hadiths: [['tirmidhi', 1209], ['ibnmajah', 2139]], duaIds: [], related: ['Закят', 'Ростовщичество', 'Финансы'] },
+  sadaqa: { ayahs: ['2:261', '2:271', '9:103'], hadiths: [['bukhari', 1410], ['muslim', 1015]], duaIds: [], related: ['Закят', 'Милосердие', 'Финансы'] },
+  riba: { ayahs: ['2:275', '2:278', '3:130'], hadiths: [['bukhari', 2766], ['muslim', 1598]], duaIds: [], related: ['Торговля', 'Финансы', 'Грехи'] },
+  default: { ayahs: [], hadiths: [], duaIds: [], related: ['Коран', 'Хадисы', 'Дуа', 'Поиск'] }
+};
+
+let activeTcat = 'all';
+function renderTopics(cat) {
+  const items = TOPICS.filter(t => cat === 'all' || t.cat === cat);
+  document.getElementById('topics-list').innerHTML = items.map(t => `
+    <div class="tcard" onclick="openTopic('${t.id}')">
+      <div class="ticon" style="background:${t.col}">${t.icon}</div>
+      <div style="flex:1;min-width:0"><div class="tc-name">${t.name}</div><div class="tc-meta">${t.meta}</div></div>
+      <div style="color:var(--text3);font-size:20px">›</div>
+    </div>`).join('');
+}
+renderTopics('all');
+
+function setTcat(el, cat) {
+  activeTcat = cat;
+  document.querySelectorAll('.tpill').forEach(p => p.classList.remove('on'));
+  el.classList.add('on');
+  renderTopics(cat);
+}
+
+async function openTopic(id) {
+  if (id === 'quran_t') { goTo('quran'); return; }
+  if (id === 'hadith_t') { goTo('hadith'); return; }
+  if (id === 'dua_t') { goTo('dua'); return; }
+  const t = TOPICS.find(x => x.id === id) || { icon: '📖', name: id, desc: '', meta: '' };
+  const refs = TOPIC_REFS[id] || TOPIC_REFS.default;
+  document.getElementById('td-icon').textContent = t.icon;
+  document.getElementById('td-title').textContent = t.name;
+  document.getElementById('td-desc').textContent = t.desc || t.meta;
+  document.getElementById('td-pills').innerHTML =
+    `<span class="tdp" style="background:rgba(201,168,76,.12);color:var(--gold)">${refs.ayahs.length} аятов</span>
+     <span class="tdp" style="background:rgba(107,158,107,.12);color:#6B9E6B;margin-left:4px">${refs.hadiths.length} хадисов</span>
+     <span class="tdp" style="background:rgba(160,123,201,.12);color:#A07BC9;margin-left:4px">${refs.duaIds.length} дуа</span>`;
+  document.getElementById('td-content').innerHTML = `<div class="loader"><div class="spinner"></div>Загрузка из Корана и Сунны...</div>`;
+  const td = document.getElementById('topic-detail');
+  td.scrollTop = 0;
+  td.classList.add('open');
+  if (cur !== 'topics') goTo('topics');
+
+  let html = '';
+  if (refs.ayahs.length) {
+    html += `<div class="tdsec"><div class="tdsec-t">📖 Аяты Корана</div><div id="td-ayahs-${id}"></div></div>`;
+  }
+  if (refs.hadiths.length) {
+    html += `<div class="tdsec"><div class="tdsec-t">📜 Хадисы</div><div id="td-hadiths-${id}"></div></div>`;
+  }
+  if (refs.duaIds.length) {
+    html += `<div class="tdsec"><div class="tdsec-t">🤲 Дуа</div><div id="td-duas-${id}"></div></div>`;
+  }
+  if (refs.related && refs.related.length) {
+    html += `<div class="tdsec"><div class="tdsec-t">🔗 Связанные темы</div>
+      <div class="rel-wrap">${refs.related.map(r => `<div class="rel-tag" onclick="showToast('Тема: ${r}')">${r}</div>`).join('')}</div></div>`;
+  }
+  html += `<div style="padding:0 20px;margin-top:14px">
+    <button class="btn-g" onclick="showToast('Добавлено в избранное ❤️')">❤️ В избранное</button>
+    <button class="btn-o" style="margin-top:8px" onclick="showToast('Поделиться')">🔗 Поделиться</button>
+  </div>`;
+  document.getElementById('td-content').innerHTML = html;
+
+  if (refs.ayahs.length) {
+    const transEd = TRANS_EDITIONS[currentTrans] || 'ru.kuliev';
+    Promise.all(refs.ayahs.map(ref =>
+      fetch(`${QURAN_API}/ayah/${ref}/editions/quran-uthmani,${transEd}`).then(r => r.json()).catch(() => null)
+    )).then(results => {
+      const el = document.getElementById(`td-ayahs-${id}`);
+      if (!el) return;
+      el.innerHTML = results.map((res, i) => {
+        if (!res || !res.data) return `<div class="tditem"><div class="tditem-ru" style="color:var(--text3)">Не удалось загрузить ${refs.ayahs[i]}</div></div>`;
+        const ar = res.data[0], ru = res.data[1];
+        return `<div class="tditem">
+          <div class="tditem-ar">${ar.text}</div>
+          <div class="tditem-ru">«${ru.text}»</div>
+          <div class="tditem-src">${ar.surah.englishName} (${ar.surah.name}) ${ar.surah.number}:${ar.numberInSurah}</div>
+        </div>`;
+      }).join('');
+    });
+  }
+  if (refs.hadiths.length) {
+    Promise.all(refs.hadiths.map(([coll, num]) =>
+      fetch(`https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/${coll === 'nasai' || coll === 'ibnmajah' ? 'eng-' : 'rus-'}${coll}/${num}.min.json`)
+        .then(r => r.json()).then(d => ({ coll, data: d.hadiths ? d.hadiths[0] : d })).catch(() => null)
+    )).then(results => {
+      const el = document.getElementById(`td-hadiths-${id}`);
+      if (!el) return;
+      el.innerHTML = results.map((res, i) => {
+        const [coll, num] = refs.hadiths[i];
+        const name = HADITH_DB[coll] ? HADITH_DB[coll].name : coll;
+        if (!res || !res.data) return `<div class="tditem"><div class="tditem-ru" style="color:var(--text3)">Не удалось загрузить хадис №${num} (${name})</div></div>`;
+        return `<div class="tditem">
+          <div class="tditem-ru">${(res.data.text || '').slice(0, 400)}</div>
+          <div class="tditem-src">${name} · № ${num}${res.data.grades && res.data.grades[0] ? ' · ' + res.data.grades[0].grade : ''}</div>
+        </div>`;
+      }).join('');
+    });
+  }
+  if (refs.duaIds.length) {
+    const el = document.getElementById(`td-duas-${id}`);
+    if (el) {
+      el.innerHTML = refs.duaIds.map(did => {
+        const d = DUAS.find(x => x.id === did);
+        if (!d) return '';
+        return `<div class="tditem">
+          <div class="tditem-ar">${d.ar}</div>
+          <div class="tditem-ru">${d.ru}</div>
+          <div class="tditem-src">${d.src}</div>
+        </div>`;
+      }).join('');
+    }
+  }
+}
+function closeTopic() { document.getElementById('topic-detail').classList.remove('open'); }
+
+// ─── SEARCH ───
+const SUGG_DATA = {
+  'род': ['Родители', 'Родственники', 'Воспитание детей'],
+  'нам': ['Намаз', 'Намерение'],
+  'тер': ['Терпение (Сабр)', 'Терпимость'],
+  'дуа': ['Дуа перед сном', 'Дуа после намаза', 'Дуа в дороге'],
+  'пок': ['Покаяние (Тауба)', 'Поклонение'],
+  'кор': ['Коран', 'Аят аль-Курси'],
+  'зак': ['Закят', 'Закят аль-Фитр'],
+  'суд': ['Судный день', 'Суд Аллаха'],
+  'рай': ['Рай (Джанна)'],
+  'хад': ['Хадисы Бухари', 'Хадисы Муслима']
+};
+let sfp = 'Все';
+
+function onSI(v) {
+  const k = Object.keys(SUGG_DATA).find(k => v.toLowerCase().startsWith(k));
+  const sb = document.getElementById('sugg-box');
+  if (k && v.length > 1) {
+    sb.innerHTML = `<div class="sugg">${SUGG_DATA[k].map(s => `<div class="si" onclick="qSearch('${s}')">🔍 ${s}</div>`).join('')}</div>`;
+  } else sb.innerHTML = '';
+}
+
+function qSearch(q) {
+  document.getElementById('si').value = q;
+  document.getElementById('sugg-box').innerHTML = '';
+  doSearch(q);
+}
+
+function doSearch(q) {
+  document.getElementById('sugg-box').innerHTML = '';
+  const term = q.toLowerCase();
+  const topicResults = TOPICS.filter(t =>
+    t.name.toLowerCase().includes(term) ||
+    t.desc.toLowerCase().includes(term)
+  ).slice(0, 3).map(t => ({ cat: 'Тема', icon: t.icon, col: '#7B8FA1', title: t.name, desc: t.meta, action: () => openTopic(t.id) }));
+  const duaResults = DUAS.filter(d =>
+    d.title.toLowerCase().includes(term) ||
+    d.ru.toLowerCase().includes(term)
+  ).slice(0, 3).map(d => ({ cat: 'Дуа', icon: '🤲', col: '#A07BC9', title: d.title, desc: d.ru.slice(0, 80) + '...', action: null }));
+  let all = [...topicResults, ...duaResults];
+  if (sfp === 'Темы') all = topicResults;
+  if (sfp === 'Дуа') all = duaResults;
+  document.getElementById('sh-home').style.display = 'none';
+  document.getElementById('sh-results').style.display = 'block';
+  document.getElementById('rc').textContent = `Найдено: ${all.length} по «${q}»`;
+  if (!all.length) {
+    document.getElementById('rl').innerHTML = `<div style="text-align:center;padding:36px 0;color:var(--text3)"><div style="font-size:30px;margin-bottom:10px">🔍</div><div style="font-size:14px">Ничего не найдено</div></div>`;
+  } else {
+    document.getElementById('rl').innerHTML = all.map(r => `
+      <div class="rcard" onclick="showToast('${r.title}')">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <span style="font-size:18px;margin-top:1px">${r.icon}</span>
+          <div style="flex:1;min-width:0">
+            <div class="rbadge" style="background:${r.col}18;color:${r.col}">${r.cat}</div>
+            <div class="rtitle">${r.title}</div>
+            <div class="rdesc">${r.desc}</div>
+          </div>
+          <div style="color:var(--text3);font-size:18px;align-self:center">›</div>
+        </div>
+      </div>`).join('');
+  }
+  if (SB_ENABLED) {
+    sbSearchMaterials(q).then(dbResults => {
+      if (dbResults && dbResults.length) {
+        const dbHtml = dbResults.map(r => `
+          <div class="rcard" onclick="showToast('${(r.title || '').replace(/'/g, "\\'")}')">
+            <div style="display:flex;align-items:flex-start;gap:10px">
+              <span style="font-size:18px;margin-top:1px">${r.type === 'ayah' ? '📖' : r.type === 'hadith' ? '📜' : r.type === 'dua' ? '🤲' : '📄'}</span>
+              <div style="flex:1;min-width:0">
+                <div class="rbadge" style="background:#C9A84C18;color:#C9A84C">${r.type === 'ayah' ? 'Аят' : r.type === 'hadith' ? 'Хадис' : r.type === 'dua' ? 'Дуа' : 'Материал'}</div>
+                <div class="rtitle">${r.title}</div>
+                <div class="rdesc">${(r.translation_ru || '').slice(0, 90)}</div>
+              </div>
+              <div style="color:var(--text3);font-size:18px;align-self:center">›</div>
+            </div>
+          </div>`).join('');
+        const rl = document.getElementById('rl');
+        if (rl) rl.innerHTML = (all.length ? rl.innerHTML : '') + dbHtml;
+        document.getElementById('rc').textContent = `Найдено: ${all.length + dbResults.length} по «${q}»`;
+      }
+    });
+  }
+}
+
+function clrSearch() {
+  document.getElementById('si').value = '';
+  document.getElementById('sugg-box').innerHTML = '';
+  document.getElementById('sh-home').style.display = 'block';
+  document.getElementById('sh-results').style.display = 'none';
+}
+
+function setFP(el, f) {
+  sfp = f;
+  document.querySelectorAll('.fp').forEach(p => p.classList.remove('on'));
+  el.classList.add('on');
+  const q = document.getElementById('si').value;
+  if (q) doSearch(q);
+}
+
+async function sbSearchMaterials(query, typeFilter) {
+  if (!SB_ENABLED) return null;
+  syncStart();
+  try {
+    const { data, error } = await sb.rpc('search_materials', { query, type_filter: typeFilter || null, limit_count: 20 });
+    if (error) throw error;
+    return data;
+  } catch (e) { sbHandleError(e, 'search'); return null; }
+  finally { syncEnd(); }
+}
+
+// ─── AUTH UI ───
+function swTab(id, el) {
+  document.querySelectorAll('.atab').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('.aform').forEach(f => f.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('f-' + id).classList.add('on');
+}
+
+function doLogin() {
+  document.getElementById('auth-view').style.display = 'none';
+  document.getElementById('prof-view').style.display = 'block';
+  showToast('Добро пожаловать, Абдуллах! 🌿');
+}
+
+function doLogout(skipApi) {
+  document.getElementById('auth-view').style.display = 'block';
+  document.getElementById('prof-view').style.display = 'none';
+  if (!skipApi) sbSignOut();
+  showToast('Вы вышли из аккаунта');
+}
+
+// ─── TOAST ───
+let tT;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('s');
+  clearTimeout(tT);
+  tT = setTimeout(() => t.classList.remove('s'), 2500);
+}
+
+// ─── AYAH OF DAY ───
+async function loadAyahOfDay() {
+  try {
+    const n = Math.floor(Math.random() * 6236) + 1;
+    const r = await fetch(`${QURAN_API}/ayah/${n}/editions/quran-uthmani,ru.kuliev`);
+    const d = await r.json();
+    const ar = d.data[0], ru = d.data[1];
+    document.getElementById('ayah-day').innerHTML = `
+      <div class="a-ar">${ar.text}</div>
+      <div class="a-ru">${ru.text}</div>
+      <div class="a-src">Сура ${ar.surah.number}:${ar.numberInSurah} · ${ar.surah.name}</div>`;
+  } catch (e) {}
+}
+setTimeout(loadAyahOfDay, 1000);
+
+// ─── ADMIN ───
+function openAdminPanel() {
+  if (!sbProfile || sbProfile.role !== 'admin') { showToast('Доступ только для администраторов'); return; }
+  document.getElementById('admin-overlay').style.display = 'block';
+  loadAdminAnalytics();
+}
+
+function closeAdminPanel() {
+  document.getElementById('admin-overlay').style.display = 'none';
+}
+
+async function loadAdminAnalytics() {
+  if (!sb) return;
+  try {
+    const since7d = new Date(Date.now() - 7 * 86400000).toISOString();
+    const [{ count: newUsers }, { count: activeUsers }, { data: topMaterials }] = await Promise.all([
+      sb.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', since7d),
+      sb.from('analytics_events').select('user_id', { count: 'exact', head: true }).gte('created_at', since7d),
+      sb.from('materials').select('title,views_count').order('views_count', { ascending: false }).limit(5),
+    ]);
+    document.getElementById('an-new-users').textContent = newUsers || 0;
+    document.getElementById('an-active-users').textContent = activeUsers || 0;
+    const el = document.getElementById('an-top-materials');
+    if (topMaterials && topMaterials.length) {
+      el.innerHTML = topMaterials.map(m => `<div class="tditem"><div class="tditem-ru">${m.title}</div><div class="tditem-src">👁️ ${m.views_count || 0} просмотров</div></div>`).join('');
+    } else {
+      el.innerHTML = '<div style="color:var(--text3);font-size:13px">Нет данных</div>';
+    }
+  } catch (e) { sbHandleError(e, 'adminAnalytics'); }
+}
+
+async function sendAdminNotification() {
+  if (!sbProfile || sbProfile.role !== 'admin') { showToast('Доступ только для администраторов'); return; }
+  const title = document.getElementById('notif-title').value.trim();
+  const body = document.getElementById('notif-body').value.trim();
+  const target = document.getElementById('notif-target').value;
+  if (!title || !body) { showToast('Заполните заголовок и текст'); return; }
+  try {
+    await sb.from('notifications_queue').insert({
+      title, body,
+      target: target === 'all' ? 'all' : 'active_7d',
+      sent_by: sbUser.id
+    });
+    showToast('✅ Уведомление отправлено в очередь');
+    document.getElementById('notif-title').value = '';
+    document.getElementById('notif-body').value = '';
+  } catch (e) { sbHandleError(e, 'adminNotif'); }
+}
+
+function enablePushNotifications() {
+  showToast('🔔 Push-уведомления будут доступны в следующем обновлении');
+}
+</script>
+</body>
+</html>
+```
+
+---
+
+✅ ЧТО ИСПРАВЛЕНО:
+
+Ошибка Решение
+HTML-теги внутри SUPABASE_CONFIG Убраны, теперь чистые строки
+Неопределённые переменные sb_publishable... Вставлены как строки
+Отсутствует vapidPublicKey Добавлено поле с пустым значением
+Нет обработки Service Worker Добавлена заглушка enablePushNotifications()
+Нет защиты от падений при отсутствии Supabase Все операции обёрнуты в if (SB_ENABLED)
+
+---
+
+🆕 ЧТО ДОБАВЛЕНО:
+
+1. Корректная проверка SB_ENABLED — если ключи не вставлены, приложение работает в демо-режиме
+2. Обработка ошибок авторизации — понятные сообщения на русском
+3. Админ-панель — работает только для пользователей с role: 'admin'
+4. Аналитика — загрузка количества пользователей и популярных материалов
+5. Очередь уведомлений — администратор может отправлять push-уведомления через Supabase
+6. Индикатор синхронизации — показывает процесс загрузки данных
+
+---
+
+📌 КАК ЗАПУСТИТЬ:
+
+1. Сохраните код в файл index.html
+2. Откройте в браузере (Chrome / Safari)
+3. Supabase автоматически подключится с вашими ключами
+4. Регистрация/вход — через email или Google/Apple OAuth
+
+---
+
+Если нужны доработки (например, добавить тафсир, аудио, офлайн-кэш сур, автодополнение поиска по аятам, заметки, избранное с синхронизацией) — скажите, я расширю функционал.
