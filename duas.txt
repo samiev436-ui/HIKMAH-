@@ -1,0 +1,28 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { EntityCrud } from "@/components/admin/EntityCrud";
+
+export const Route = createFileRoute("/_authenticated/admin/duas")({
+  head: () => ({ meta: [{ title: "Дуа — Admin" }] }),
+  component: () => (
+    <EntityCrud
+      title="Дуа"
+      table="duas"
+      entityType="dua"
+      searchColumn="title"
+      columns={[
+        { key: "title", label: "Название" },
+        { key: "when_to_recite", label: "Когда" },
+        { key: "source", label: "Источник" },
+      ]}
+      fields={[
+        { key: "title", label: "Название", type: "text", required: true },
+        { key: "arabic", label: "Арабский текст", type: "arabic", required: true },
+        { key: "transliteration", label: "Транскрипция", type: "textarea" },
+        { key: "translation", label: "Перевод", type: "textarea", required: true },
+        { key: "when_to_recite", label: "Когда читается", type: "textarea" },
+        { key: "source", label: "Источник", type: "text" },
+        { key: "audio_url", label: "URL аудио", type: "text" },
+      ]}
+    />
+  ),
+});

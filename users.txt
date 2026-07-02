@@ -1,0 +1,111 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Shield, ShieldCheck, User as UserIcon } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+
+export const Route = createFileRoute("/_authenticated/admin/users")({
+  head: () => ({ meta: [{ title: "Пользователи — Admin" }] }),
+  component: UsersPage,
+});
+
+type Row = {
+  id: string;
+  email: string;
+  created_at: string;
+  last_sign_in_at: string | null;
+  display_name: string | null;
+  roles: ("admin" | "moderator" | "user")[];
+};
+
+function UsersPage() {
+  const qc = useQueryClient();
+  const [q, setQ] = useState("");
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-users"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_list_users");
+      if (error) throw error;
+      return (data ?? []) as Row[];
+    },
+  });
+
+  async function toggle(uid: string, role: "admin" | "moderator", grant: boolean) {
+    const { error } = await supabase.rpc("admin_set_role", { _user_id: uid, _role: role, _grant: grant });
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Роль обновлена");
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+    }
+  }
+
+  const filtered = (data ?? []).filter((u) =>
+    !q || u.email?.toLowerCase().includes(q.toLowerCase()) || u.display_name?.toLowerCase().includes(q.toLowerCase()),
+  );
+
+  return (
+    <div>
+      <h1 className="font-display text-3xl text-emerald-deep">Пользователи</h1>
+      <p className="text-sm text-muted-foreground">{isLoading ? "..." : `${filtered.length} пользователей`}</p>
+
+      <Input placeholder="Поиск по email или имени..." value={q} onChange={(e) => setQ(e.target.value)} className="mt-4 max-w-sm" />
+
+      <div className="mt-4 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-soft">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium">Email</th>
+              <th className="px-4 py-3 text-left font-medium">Имя</th>
+              <th className="px-4 py-3 text-left font-medium">Зарегистрирован</th>
+              <th className="px-4 py-3 text-left font-medium">Последний вход</th>
+              <th className="px-4 py-3 text-left font-medium">Роли</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((u) => (
+              <tr key={u.id} className="border-t border-border/40">
+                <td className="px-4 py-3">{u.email}</td>
+                <td className="px-4 py-3 text-muted-foreground">{u.display_name || "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">{new Date(u.created_at).toLocaleDateString("ru-RU")}</td>
+                <td className="px-4 py-3 text-muted-foreground">{u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString("ru-RU") : "—"}</td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-1">
+                    {u.roles.map((r) => (
+                      <span key={r} className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider ${
+                        r === "admin" ? "bg-emerald-deep text-white" : r === "moderator" ? "bg-gold text-emerald-deep" : "bg-muted text-muted-foreground"
+                      }`}>{r}</span>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => toggle(u.id, "admin", !u.roles.includes("admin"))} title="Toggle admin">
+                      <ShieldCheck className={`h-4 w-4 ${u.roles.includes("admin") ? "text-emerald-deep" : "text-muted-foreground"}`} />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => toggle(u.id, "moderator", !u.roles.includes("moderator"))} title="Toggle moderator">
+                      <Shield className={`h-4 w-4 ${u.roles.includes("moderator") ? "text-gold-dark" : "text-muted-foreground"}`} />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!isLoading && filtered.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                <UserIcon className="mx-auto mb-2 h-6 w-6" /> Никого не найдено
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-3 text-xs text-muted-foreground">
+        Нажмите <ShieldCheck className="inline h-3 w-3" /> чтобы назначить/снять роль администратора,
+        <Shield className="mx-1 inline h-3 w-3" /> — модератора.
+      </p>
+    </div>
+  );
+}

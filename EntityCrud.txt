@@ -1,0 +1,255 @@
+// Generic CRUD manager for a Supabase table.
+// Handles list, create, edit, delete + audit logging + status filter.
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { toast } from "sonner";
+
+export type FieldType = "text" | "textarea" | "number" | "select" | "arabic";
+
+export type FieldDef = {
+  key: string;
+  label: string;
+  type: FieldType;
+  required?: boolean;
+  options?: { value: string; label: string }[];
+  placeholder?: string;
+};
+
+export type ColumnDef = { key: string; label: string; format?: (v: any) => string };
+
+type Props = {
+  title: string;
+  table: "topics" | "ayahs" | "hadiths" | "duas" | "tafsirs" | "categories";
+  entityType: "topic" | "ayah" | "hadith" | "dua" | "tafsir" | "category";
+  columns: ColumnDef[];
+  fields: FieldDef[];
+  searchColumn?: string;
+  orderColumn?: string;
+  defaultValues?: Record<string, any>;
+  hasStatus?: boolean;
+};
+
+export function EntityCrud({
+  title, table, entityType, columns, fields, searchColumn, orderColumn = "updated_at", defaultValues = {}, hasStatus = true,
+}: Props) {
+  const qc = useQueryClient();
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState<string>("all");
+  const [editing, setEditing] = useState<Record<string, any> | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", table, q, status],
+    queryFn: async () => {
+      let query = (supabase as any).from(table).select("*").order(orderColumn, { ascending: false }).limit(200);
+      if (q && searchColumn) query = query.ilike(searchColumn, `%${q}%`);
+      if (hasStatus && status !== "all") query = query.eq("status", status);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  function startCreate() {
+    setEditing({ ...defaultValues });
+    setOpen(true);
+  }
+  function startEdit(row: Record<string, any>) {
+    setEditing({ ...row });
+    setOpen(true);
+  }
+  async function save() {
+    if (!editing) return;
+    const clean: Record<string, any> = {};
+    for (const f of fields) {
+      const val = editing[f.key];
+      if (val === "" || val === undefined) continue;
+      clean[f.key] = f.type === "number" ? Number(val) : val;
+    }
+    if (hasStatus && !clean.status) clean.status = "draft";
+
+    try {
+      if (editing.id) {
+        const { error } = await (supabase as any).from(table).update(clean).eq("id", editing.id);
+        if (error) throw error;
+        await supabase.rpc("log_audit", {
+          _entity_type: entityType, _entity_id: editing.id, _action: "update", _before: null, _after: clean,
+        });
+        toast.success("Обновлено");
+      } else {
+        const { data, error } = await (supabase as any).from(table).insert(clean).select("id").single();
+        if (error) throw error;
+        await supabase.rpc("log_audit", {
+          _entity_type: entityType, _entity_id: data.id, _action: "create", _before: null, _after: clean,
+        });
+        toast.success("Создано");
+      }
+      setOpen(false);
+      qc.invalidateQueries({ queryKey: ["admin", table] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка");
+    }
+  }
+
+  async function del(row: Record<string, any>) {
+    if (!confirm(`Удалить: ${row[columns[0].key]}?`)) return;
+    try {
+      await supabase.rpc("log_audit", {
+        _entity_type: entityType, _entity_id: row.id, _action: "delete", _before: row, _after: null,
+      });
+      const { error } = await (supabase as any).from(table).delete().eq("id", row.id);
+      if (error) throw error;
+      toast.success("Удалено");
+      qc.invalidateQueries({ queryKey: ["admin", table] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка");
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl text-emerald-deep">{title}</h1>
+          <p className="text-sm text-muted-foreground">{isLoading ? "..." : `${data?.length ?? 0} записей`}</p>
+        </div>
+        <Button onClick={startCreate} className="bg-emerald-deep hover:bg-emerald gap-2">
+          <Plus className="h-4 w-4" /> Добавить
+        </Button>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {searchColumn && (
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="Поиск..." value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
+          </div>
+        )}
+        {hasStatus && (
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все статусы</SelectItem>
+              <SelectItem value="draft">Черновик</SelectItem>
+              <SelectItem value="published">Опубликовано</SelectItem>
+              <SelectItem value="archived">Скрыто</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-soft">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
+            <tr>
+              {columns.map((c) => (
+                <th key={c.key} className="px-4 py-3 text-left font-medium">{c.label}</th>
+              ))}
+              {hasStatus && <th className="px-4 py-3 text-left font-medium">Статус</th>}
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {(data ?? []).map((row: any) => (
+              <tr key={row.id} className="border-t border-border/40 hover:bg-muted/30">
+                {columns.map((c) => (
+                  <td key={c.key} className="px-4 py-3 max-w-md truncate">
+                    {c.format ? c.format(row[c.key]) : String(row[c.key] ?? "—")}
+                  </td>
+                ))}
+                {hasStatus && (
+                  <td className="px-4 py-3">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wider">
+                      {row.status}
+                    </span>
+                  </td>
+                )}
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => startEdit(row)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => del(row)}>
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!isLoading && (data?.length ?? 0) === 0 && (
+              <tr><td colSpan={columns.length + 2} className="px-4 py-10 text-center text-muted-foreground">Пусто</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editing?.id ? "Редактировать" : "Создать"}</DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <div className="space-y-4">
+              {fields.map((f) => (
+                <div key={f.key}>
+                  <Label>{f.label}{f.required && " *"}</Label>
+                  {f.type === "textarea" || f.type === "arabic" ? (
+                    <Textarea
+                      value={editing[f.key] ?? ""}
+                      onChange={(e) => setEditing({ ...editing, [f.key]: e.target.value })}
+                      rows={f.type === "arabic" ? 3 : 5}
+                      dir={f.type === "arabic" ? "rtl" : undefined}
+                      className={f.type === "arabic" ? "font-arabic text-lg" : ""}
+                      placeholder={f.placeholder}
+                    />
+                  ) : f.type === "select" ? (
+                    <Select value={String(editing[f.key] ?? "")} onValueChange={(v) => setEditing({ ...editing, [f.key]: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {f.options?.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      type={f.type === "number" ? "number" : "text"}
+                      value={editing[f.key] ?? ""}
+                      onChange={(e) => setEditing({ ...editing, [f.key]: e.target.value })}
+                      placeholder={f.placeholder}
+                    />
+                  )}
+                </div>
+              ))}
+              {hasStatus && (
+                <div>
+                  <Label>Статус</Label>
+                  <Select value={editing.status ?? "draft"} onValueChange={(v) => setEditing({ ...editing, status: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Черновик</SelectItem>
+                      <SelectItem value="published">Опубликовано</SelectItem>
+                      <SelectItem value="archived">Скрыто</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Отмена</Button>
+            <Button onClick={save} className="bg-emerald-deep hover:bg-emerald">Сохранить</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

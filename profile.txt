@@ -1,0 +1,64 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { User, LogOut, Shield, LogIn } from "lucide-react";
+import { TopBar } from "@/components/TopBar";
+import { BottomNav } from "@/components/BottomNav";
+import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+
+export const Route = createFileRoute("/profile")({
+  head: () => ({ meta: [{ title: "Профиль — HIKMAH" }] }),
+  component: ProfilePage,
+});
+
+function ProfilePage() {
+  const { user, isModerator, isAdmin, signOut, loading } = useAuth();
+  const nav = useNavigate();
+
+  async function handleSignOut() {
+    await signOut();
+    nav({ to: "/" });
+  }
+
+  return (
+    <div className="flex min-h-screen flex-col bg-background">
+      <TopBar />
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center px-4 py-12 text-center">
+        <span className="grid h-16 w-16 place-items-center rounded-2xl bg-gold-soft text-emerald-deep">
+          <User className="h-7 w-7" strokeWidth={1.75} />
+        </span>
+
+        {loading ? (
+          <p className="mt-4 text-muted-foreground">Загрузка...</p>
+        ) : user ? (
+          <>
+            <h1 className="mt-4 font-display text-3xl">{user.user_metadata?.display_name ?? user.email}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
+
+            <div className="mt-8 flex w-full max-w-sm flex-col gap-2">
+              {isModerator && (
+                <Link to="/admin" className="flex items-center justify-center gap-2 rounded-xl bg-emerald-deep px-4 py-3 text-sm font-medium text-white hover:bg-emerald">
+                  <Shield className="h-4 w-4" />
+                  {isAdmin ? "Админ-панель" : "Панель модератора"}
+                </Link>
+              )}
+              <Button variant="outline" onClick={handleSignOut} className="gap-2">
+                <LogOut className="h-4 w-4" /> Выйти
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h1 className="mt-4 font-display text-3xl">Войдите в HIKMAH</h1>
+            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+              Сохраняйте избранные аяты, заметки и прогресс изучения
+            </p>
+            <Link to="/auth" className="mt-6 flex items-center gap-2 rounded-xl bg-emerald-deep px-6 py-3 text-sm font-medium text-white hover:bg-emerald">
+              <LogIn className="h-4 w-4" /> Войти или зарегистрироваться
+            </Link>
+          </>
+        )}
+      </main>
+      <BottomNav />
+    </div>
+  );
+}

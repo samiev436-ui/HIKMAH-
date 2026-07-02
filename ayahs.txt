@@ -1,0 +1,31 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { EntityCrud } from "@/components/admin/EntityCrud";
+
+export const Route = createFileRoute("/_authenticated/admin/ayahs")({
+  head: () => ({ meta: [{ title: "Аяты — Admin" }] }),
+  component: () => (
+    <EntityCrud
+      title="Аяты"
+      table="ayahs"
+      entityType="ayah"
+      searchColumn="translation"
+      columns={[
+        { key: "surah_name", label: "Сура" },
+        { key: "surah_number", label: "№ суры" },
+        { key: "ayah_number", label: "№ аята" },
+        { key: "translation", label: "Перевод" },
+      ]}
+      fields={[
+        { key: "surah_name", label: "Название суры", type: "text", required: true },
+        { key: "surah_number", label: "Номер суры", type: "number", required: true },
+        { key: "ayah_number", label: "Номер аята", type: "number", required: true },
+        { key: "arabic", label: "Арабский текст", type: "arabic", required: true },
+        { key: "transliteration", label: "Транскрипция", type: "textarea" },
+        { key: "translation", label: "Перевод", type: "textarea", required: true },
+        { key: "short_tafsir", label: "Краткий тафсир", type: "textarea" },
+        { key: "revelation_reason", label: "Причина ниспослания", type: "textarea" },
+        { key: "audio_url", label: "URL аудио", type: "text" },
+      ]}
+    />
+  ),
+});

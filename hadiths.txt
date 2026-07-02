@@ -1,0 +1,39 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { EntityCrud } from "@/components/admin/EntityCrud";
+
+export const Route = createFileRoute("/_authenticated/admin/hadiths")({
+  head: () => ({ meta: [{ title: "Хадисы — Admin" }] }),
+  component: () => (
+    <EntityCrud
+      title="Хадисы"
+      table="hadiths"
+      entityType="hadith"
+      searchColumn="translation"
+      columns={[
+        { key: "collection", label: "Сборник" },
+        { key: "number", label: "№" },
+        { key: "grade", label: "Степень" },
+        { key: "translation", label: "Перевод" },
+      ]}
+      fields={[
+        { key: "collection", label: "Сборник", type: "text", required: true, placeholder: "Бухари" },
+        { key: "number", label: "Номер", type: "text" },
+        { key: "narrator", label: "Передатчик", type: "text" },
+        { key: "arabic", label: "Арабский текст", type: "arabic" },
+        { key: "translation", label: "Перевод", type: "textarea", required: true },
+        { key: "commentary", label: "Пояснение", type: "textarea" },
+        { key: "source", label: "Источник", type: "text" },
+        {
+          key: "grade", label: "Степень достоверности", type: "select",
+          options: [
+            { value: "sahih", label: "Sahih (Достоверный)" },
+            { value: "hasan", label: "Hasan (Хороший)" },
+            { value: "daif", label: "Daif (Слабый)" },
+            { value: "maudu", label: "Maudu (Выдуманный)" },
+            { value: "unknown", label: "Неизвестно" },
+          ],
+        },
+      ]}
+    />
+  ),
+});

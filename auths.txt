@@ -1,0 +1,99 @@
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
+
+export const Route = createFileRoute("/auth")({
+  head: () => ({ meta: [{ title: "Вход — HIKMAH" }] }),
+  component: AuthPage,
+});
+
+function AuthPage() {
+  const [mode, setMode] = useState<"in" | "up">("in");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const nav = useNavigate();
+  const { session } = useAuth();
+
+  useEffect(() => {
+    if (session) nav({ to: "/" });
+  }, [session, nav]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (mode === "up") {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { display_name: name || email.split("@")[0] },
+          },
+        });
+        if (error) throw error;
+        toast.success("Аккаунт создан. Вы вошли.");
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        toast.success("С возвращением!");
+      }
+      nav({ to: "/" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Ошибка входа";
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-border/60 bg-card p-6 shadow-soft">
+        <Link to="/" className="text-xs text-muted-foreground hover:text-foreground">
+          ← На главную
+        </Link>
+        <h1 className="mt-4 font-display text-3xl text-emerald-deep">
+          {mode === "in" ? "Вход" : "Регистрация"}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {mode === "in" ? "Войдите в свой аккаунт HIKMAH" : "Создайте аккаунт HIKMAH"}
+        </p>
+
+        <form onSubmit={submit} className="mt-6 space-y-4">
+          {mode === "up" && (
+            <div>
+              <Label htmlFor="name">Имя</Label>
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+          )}
+          <div>
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="password">Пароль</Label>
+            <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          <Button type="submit" disabled={busy} className="w-full bg-emerald-deep hover:bg-emerald">
+            {busy ? "..." : mode === "in" ? "Войти" : "Создать аккаунт"}
+          </Button>
+        </form>
+
+        <button
+          onClick={() => setMode(mode === "in" ? "up" : "in")}
+          className="mt-4 w-full text-center text-xs text-muted-foreground hover:text-foreground"
+        >
+          {mode === "in" ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти"}
+        </button>
+      </div>
+    </div>
+  );
+}

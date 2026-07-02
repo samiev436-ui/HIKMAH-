@@ -1,0 +1,81 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useState } from "react";
+import { Eye } from "lucide-react";
+
+export const Route = createFileRoute("/_authenticated/admin/audit")({
+  head: () => ({ meta: [{ title: "Журнал — Admin" }] }),
+  component: AuditPage,
+});
+
+function AuditPage() {
+  const [open, setOpen] = useState<any>(null);
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-audit"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("audit_log").select("*").order("created_at", { ascending: false }).limit(500);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  return (
+    <div>
+      <h1 className="font-display text-3xl text-emerald-deep">Журнал изменений</h1>
+      <p className="text-sm text-muted-foreground">{isLoading ? "..." : `${data?.length ?? 0} записей (последние 500)`}</p>
+
+      <div className="mt-4 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-soft">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium">Время</th>
+              <th className="px-4 py-3 text-left font-medium">Действие</th>
+              <th className="px-4 py-3 text-left font-medium">Тип</th>
+              <th className="px-4 py-3 text-left font-medium">ID сущности</th>
+              <th className="px-4 py-3 text-left font-medium">Пользователь</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {(data ?? []).map((row: any) => (
+              <tr key={row.id} className="border-t border-border/40">
+                <td className="px-4 py-3 text-muted-foreground">{new Date(row.created_at).toLocaleString("ru-RU")}</td>
+                <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider ${
+                  row.action === "create" ? "bg-emerald/10 text-emerald-deep" :
+                  row.action === "update" ? "bg-gold-soft text-gold-dark" :
+                  "bg-destructive/10 text-destructive"
+                }`}>{row.action}</span></td>
+                <td className="px-4 py-3">{row.entity_type ?? "—"}</td>
+                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.entity_id?.slice(0, 8) ?? "—"}</td>
+                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.actor_id?.slice(0, 8) ?? "—"}</td>
+                <td className="px-4 py-3">
+                  <button onClick={() => setOpen(row)} className="text-muted-foreground hover:text-foreground">
+                    <Eye className="h-4 w-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={!!open} onOpenChange={() => setOpen(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Детали изменения</DialogTitle></DialogHeader>
+          {open && (
+            <div className="space-y-4">
+              <div><h3 className="text-sm font-medium">Before</h3>
+                <pre className="mt-1 max-h-60 overflow-auto rounded bg-muted p-3 text-xs">{JSON.stringify(open.before, null, 2)}</pre>
+              </div>
+              <div><h3 className="text-sm font-medium">After</h3>
+                <pre className="mt-1 max-h-60 overflow-auto rounded bg-muted p-3 text-xs">{JSON.stringify(open.after, null, 2)}</pre>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

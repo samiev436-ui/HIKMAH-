@@ -1,0 +1,28 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { EntityCrud } from "@/components/admin/EntityCrud";
+
+export const Route = createFileRoute("/_authenticated/admin/topics")({
+  head: () => ({ meta: [{ title: "Темы — Admin" }] }),
+  component: () => (
+    <EntityCrud
+      title="Темы"
+      table="topics"
+      entityType="topic"
+      searchColumn="title"
+      columns={[
+        { key: "title", label: "Название" },
+        { key: "slug", label: "Slug" },
+        { key: "reading_time_min", label: "Мин" },
+      ]}
+      fields={[
+        { key: "title", label: "Название", type: "text", required: true },
+        { key: "slug", label: "Slug (URL)", type: "text", required: true, placeholder: "napr-sabr" },
+        { key: "short_description", label: "Краткое описание", type: "textarea" },
+        { key: "description", label: "Полное описание", type: "textarea" },
+        { key: "icon", label: "Иконка (lucide)", type: "text", placeholder: "book-open" },
+        { key: "image_url", label: "URL изображения", type: "text" },
+        { key: "reading_time_min", label: "Время чтения (мин)", type: "number" },
+      ]}
+    />
+  ),
+});

@@ -1,0 +1,81 @@
+
+-- Admin: manage all profiles
+CREATE POLICY "Admins manage all profiles" ON public.profiles
+  FOR ALL TO authenticated
+  USING (public.has_role(auth.uid(), 'admin'))
+  WITH CHECK (public.has_role(auth.uid(), 'admin'));
+
+-- Admin: manage user_roles
+CREATE POLICY "Admins manage user_roles" ON public.user_roles
+  FOR ALL TO authenticated
+  USING (public.has_role(auth.uid(), 'admin'))
+  WITH CHECK (public.has_role(auth.uid(), 'admin'));
+
+-- Admin: insert audit
+CREATE POLICY "Mods insert audit" ON public.audit_log
+  FOR INSERT TO authenticated
+  WITH CHECK (public.has_role(auth.uid(), 'admin') OR public.has_role(auth.uid(), 'moderator'));
+
+-- Helper: log audit entry
+CREATE OR REPLACE FUNCTION public.log_audit(
+  _entity_type public.entity_type,
+  _entity_id uuid,
+  _action text,
+  _before jsonb,
+  _after jsonb
+) RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  INSERT INTO public.audit_log (actor_id, entity_type, entity_id, action, before, after)
+  VALUES (auth.uid(), _entity_type, _entity_id, _action, _before, _after);
+$$;
+
+GRANT EXECUTE ON FUNCTION public.log_audit(public.entity_type, uuid, text, jsonb, jsonb) TO authenticated;
+
+-- Admin: list all user emails via a view of auth.users (safe minimal projection)
+CREATE OR REPLACE FUNCTION public.admin_list_users()
+RETURNS TABLE (
+  id uuid,
+  email text,
+  created_at timestamptz,
+  last_sign_in_at timestamptz,
+  display_name text,
+  roles public.app_role[]
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT u.id, u.email::text, u.created_at, u.last_sign_in_at,
+         p.display_name,
+         COALESCE(ARRAY(SELECT role FROM public.user_roles r WHERE r.user_id = u.id), '{}')
+  FROM auth.users u
+  LEFT JOIN public.profiles p ON p.id = u.id
+  WHERE public.has_role(auth.uid(), 'admin')
+  ORDER BY u.created_at DESC;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_list_users() TO authenticated;
+
+-- Admin: assign / revoke role
+CREATE OR REPLACE FUNCTION public.admin_set_role(_user_id uuid, _role public.app_role, _grant boolean)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT public.has_role(auth.uid(), 'admin') THEN
+    RAISE EXCEPTION 'forbidden';
+  END IF;
+  IF _grant THEN
+    INSERT INTO public.user_roles (user_id, role) VALUES (_user_id, _role)
+    ON CONFLICT DO NOTHING;
+  ELSE
+    DELETE FROM public.user_roles WHERE user_id = _user_id AND role = _role;
+  END IF;
+END $$;
+
+GRANT EXECUTE ON FUNCTION public.admin_set_role(uuid, public.app_role, boolean) TO authenticated;

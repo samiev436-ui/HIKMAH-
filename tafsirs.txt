@@ -1,0 +1,35 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { EntityCrud } from "@/components/admin/EntityCrud";
+
+export const Route = createFileRoute("/_authenticated/admin/tafsirs")({
+  head: () => ({ meta: [{ title: "Тафсиры — Admin" }] }),
+  component: () => (
+    <EntityCrud
+      title="Тафсиры"
+      table="tafsirs"
+      entityType="tafsir"
+      searchColumn="text"
+      hasStatus={false}
+      columns={[
+        { key: "author", label: "Автор" },
+        { key: "title", label: "Название" },
+        { key: "depth", label: "Уровень" },
+      ]}
+      fields={[
+        { key: "ayah_id", label: "ID аята (UUID)", type: "text", required: true, placeholder: "uuid аята из /admin/ayahs" },
+        { key: "author", label: "Автор", type: "text", required: true, placeholder: "Ибн Касир" },
+        { key: "title", label: "Название тафсира", type: "text" },
+        {
+          key: "depth", label: "Уровень", type: "select",
+          options: [
+            { value: "short", label: "Краткий" },
+            { value: "medium", label: "Средний" },
+            { value: "long", label: "Полный" },
+          ],
+        },
+        { key: "text", label: "Текст тафсира", type: "textarea", required: true },
+        { key: "source", label: "Источник", type: "text" },
+      ]}
+    />
+  ),
+});

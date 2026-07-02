@@ -1,0 +1,127 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import { Upload, FileJson, FileSpreadsheet } from "lucide-react";
+
+export const Route = createFileRoute("/_authenticated/admin/import")({
+  head: () => ({ meta: [{ title: "Импорт — Admin" }] }),
+  component: ImportPage,
+});
+
+const TABLES = ["topics", "ayahs", "hadiths", "duas", "tafsirs", "categories"] as const;
+type Table = (typeof TABLES)[number];
+
+function parseCsv(text: string): Record<string, string>[] {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+  return lines.slice(1).map((line) => {
+    const cells = line.match(/("([^"]*)"|[^,]+)/g)?.map((c) => c.replace(/^"|"$/g, "").trim()) ?? [];
+    return Object.fromEntries(headers.map((h, i) => [h, cells[i] ?? ""]));
+  });
+}
+
+function ImportPage() {
+  const [table, setTable] = useState<Table>("ayahs");
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function handleImport() {
+    setBusy(true);
+    setResult(null);
+    try {
+      let rows: Record<string, any>[] = [];
+      const trimmed = text.trim();
+      if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+        const parsed = JSON.parse(trimmed);
+        rows = Array.isArray(parsed) ? parsed : [parsed];
+      } else {
+        rows = parseCsv(trimmed);
+      }
+      if (rows.length === 0) throw new Error("Нет данных для импорта");
+
+      const { error, data } = await (supabase as any).from(table).insert(rows).select("id");
+      if (error) throw error;
+
+      await supabase.rpc("log_audit", {
+        _entity_type: table.replace(/s$/, "") as any,
+        _entity_id: null as any,
+        _action: `bulk_import_${data?.length ?? 0}`,
+        _before: null,
+        _after: { count: data?.length ?? 0 },
+      });
+
+      setResult(`✅ Импортировано: ${data?.length ?? 0} записей`);
+      setText("");
+      toast.success(`${data?.length ?? 0} записей загружено`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Ошибка импорта";
+      setResult(`❌ ${msg}`);
+      toast.error(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const t = await file.text();
+    setText(t);
+  }
+
+  return (
+    <div className="max-w-3xl">
+      <h1 className="font-display text-3xl text-emerald-deep">Массовый импорт</h1>
+      <p className="text-sm text-muted-foreground">Загрузите данные в формате JSON или CSV</p>
+
+      <div className="mt-6 space-y-4">
+        <div>
+          <Label>Таблица</Label>
+          <Select value={table} onValueChange={(v) => setTable(v as Table)}>
+            <SelectTrigger className="max-w-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TABLES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label>Файл (JSON / CSV)</Label>
+          <input type="file" accept=".json,.csv,.txt" onChange={handleFile}
+            className="mt-1 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-emerald-deep file:px-4 file:py-2 file:text-sm file:text-white hover:file:bg-emerald" />
+        </div>
+
+        <div>
+          <Label>Или вставьте данные</Label>
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={12} className="font-mono text-xs"
+            placeholder='[{"surah_name":"Аль-Бакара","surah_number":2,"ayah_number":1,"arabic":"...","translation":"..."}]' />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button onClick={handleImport} disabled={busy || !text.trim()} className="bg-emerald-deep hover:bg-emerald gap-2">
+            <Upload className="h-4 w-4" /> {busy ? "Импорт..." : "Импортировать"}
+          </Button>
+          {result && <span className="text-sm">{result}</span>}
+        </div>
+
+        <div className="mt-6 rounded-xl border border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">💡 Форматы</p>
+          <div className="mt-2 flex gap-4">
+            <div className="flex items-center gap-1"><FileJson className="h-4 w-4" /> JSON массив объектов</div>
+            <div className="flex items-center gap-1"><FileSpreadsheet className="h-4 w-4" /> CSV с заголовком</div>
+          </div>
+          <p className="mt-2">Ключи должны совпадать со столбцами таблицы. Для Excel: сохраните как CSV.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
